@@ -1286,6 +1286,15 @@ select {
   border-radius: 18px;
 }
 
+.log-view-toolbar {
+  margin-bottom: 10px;
+}
+
+.log-view-toolbar .muted {
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .compact-list-table .state-chip {
   padding: 4px 8px;
 }
@@ -1596,59 +1605,67 @@ select {
 .log-overview-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .overview-card {
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-radius: 16px;
   background: var(--card-gradient);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
 }
 
+.log-overview-grid .overview-card {
+  box-shadow: none;
+}
+
 .overview-label {
   font-size: 12px;
   color: var(--muted);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .overview-value {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 
 .overview-sub {
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: 3px;
+  font-size: 11px;
   color: var(--muted);
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 .quick-filter-panel {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+}
+
+.quick-filter-panel .panel-body {
+  padding: 12px 14px;
 }
 
 .log-toolbar-tight {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .quick-filter-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   margin-bottom: 2px;
 }
 
 .quick-filter-chips {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .quick-chip {
-  padding: 5px 10px;
+  padding: 4px 9px;
   border-radius: 999px;
   border: 1px solid var(--chip-border);
   background: var(--chip-bg);
@@ -2340,21 +2357,25 @@ select {
 }
 
 .log-filters-panel {
-  margin-bottom: 12px;
-  padding: 14px;
+  margin-bottom: 10px;
+  padding: 12px;
   border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, 0.12);
   background: var(--subtle-block-bg);
 }
 
 .page-section-head-tight {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+}
+
+.page-section-head-tight .section-desc {
+  margin-top: 4px;
 }
 
 .log-filters {
   display: grid;
   grid-template-columns: 1.4fr 0.8fr 1fr 1fr auto;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 0;
 }
 
