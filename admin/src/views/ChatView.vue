@@ -23,9 +23,9 @@
         <div class="chat-toolbar-right">
           <span class="state-chip">{{ streamMode ? '流式输出' : '非流输出' }}</span>
           <span v-if="sending" class="state-chip is-warning">生成中</span>
-          <el-button v-if="sending" type="danger" plain @click="stopGeneration">停止生成</el-button>
-          <el-button @click="clearHistory" :disabled="sending">清空历史</el-button>
-          <el-button class="chat-settings-btn" @click="settingsVisible = true">设置</el-button>
+          <el-button v-if="sending" type="danger" plain class="toolbar-danger-btn" @click="stopGeneration">停止生成</el-button>
+          <el-button class="toolbar-ghost-btn" @click="clearHistory" :disabled="sending">清空历史</el-button>
+          <el-button class="toolbar-ghost-btn chat-settings-btn" @click="settingsVisible = true">设置</el-button>
         </div>
       </div>
 
@@ -111,36 +111,67 @@
             <span class="chat-composer-count">{{ draft.length }} 字</span>
           </div>
           <div class="chat-composer-right">
-            <el-button v-if="sending" type="danger" plain @click="stopGeneration">停止</el-button>
-            <el-button type="primary" :loading="sending" @click="sendMessage">发送</el-button>
+            <el-button v-if="sending" type="danger" plain class="toolbar-danger-btn" @click="stopGeneration">停止</el-button>
+            <el-button type="primary" class="toolbar-primary-btn" :loading="sending" @click="sendMessage">发送</el-button>
           </div>
         </div>
       </div>
     </div>
 
-    <el-dialog v-model="settingsVisible" title="聊天设置" width="640px">
-      <el-form label-position="top">
-        <el-form-item label="系统提示词">
+    <el-dialog v-model="settingsVisible" title="聊天设置" width="680px" class="chat-settings-dialog">
+      <div class="chat-settings-shell">
+        <div class="chat-settings-intro">
+          <div>
+            <div class="chat-settings-title">把这页调成你顺手的工作状态</div>
+            <div class="chat-settings-desc">这里管的是聊天行为，不影响后台其他页面。改完就保存在当前浏览器。</div>
+          </div>
+          <span class="state-chip">本地保存</span>
+        </div>
+
+        <div class="chat-settings-card">
+          <div class="chat-settings-card-head">
+            <div>
+              <div class="chat-settings-card-title">系统提示词</div>
+              <div class="chat-settings-card-desc">决定助手默认站在什么角色回答。适合写项目上下文、回答风格和排障偏好。</div>
+            </div>
+          </div>
           <el-input
             v-model="systemPrompt"
             type="textarea"
             :rows="8"
-            placeholder="比如：你是一个直接、简洁、靠谱的助手。"
+            class="chat-settings-prompt-input"
+            placeholder="默认会使用 CodeAip 项目助理 / 工程师提示词，也可以自己改。"
           />
           <div class="cell-sub">保存后会参与后续对话，但不会自动插到可见聊天历史里。</div>
-        </el-form-item>
+        </div>
 
-        <el-form-item label="输出模式">
-          <el-switch v-model="streamMode" active-text="流式输出" inactive-text="非流输出" />
-        </el-form-item>
+        <div class="chat-settings-grid">
+          <div class="chat-settings-card">
+            <div class="chat-settings-card-head">
+              <div>
+                <div class="chat-settings-card-title">输出模式</div>
+                <div class="chat-settings-card-desc">流式更像实时对话；非流式更稳定，适合对比完整结果。</div>
+              </div>
+              <el-switch v-model="streamMode" active-text="流式输出" inactive-text="非流输出" />
+            </div>
+          </div>
 
-        <el-form-item label="失败自动重试次数">
-          <el-input-number v-model="retryCount" :min="0" :max="5" :step="1" />
-          <div class="cell-sub">仅在生成阶段接口返回错误时生效。填 0 就是不重试。</div>
-        </el-form-item>
-      </el-form>
+          <div class="chat-settings-card">
+            <div class="chat-settings-card-head">
+              <div>
+                <div class="chat-settings-card-title">失败自动重试</div>
+                <div class="chat-settings-card-desc">只在生成阶段接口报错时生效。填 0 就是不重试。</div>
+              </div>
+            </div>
+            <div class="chat-settings-inline-control">
+              <el-input-number v-model="retryCount" :min="0" :max="5" :step="1" />
+              <span class="mini-tag">最多 5 次</span>
+            </div>
+          </div>
+        </div>
+      </div>
       <template #footer>
-        <el-button @click="settingsVisible = false">关闭</el-button>
+        <el-button class="toolbar-ghost-btn" @click="settingsVisible = false">关闭</el-button>
       </template>
     </el-dialog>
   </AppLayout>
@@ -148,19 +179,52 @@
 
 <script setup>
 defineOptions({ name: 'chat' })
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AppLayout from '../components/AppLayout.vue'
 import { adminApi } from '../services/adminApi'
 
+const route = useRoute()
+const router = useRouter()
+
+// 聊天页本地持久化：
+// - CHAT_STORAGE_KEY: 可见聊天记录
+// - CHAT_SETTINGS_KEY: 当前聊天设置（key/model/系统提示词/流式开关/重试次数）
+// - CHAT_EXTERNAL_DRAFT_STORAGE_KEY: 从请求日志“问AI”跳过来时临时塞给聊天输入框的草稿
 const CHAT_STORAGE_KEY = 'codeaip_chat_history_v1'
 const CHAT_SETTINGS_KEY = 'codeaip_chat_settings_v1'
+const CHAT_EXTERNAL_DRAFT_STORAGE_KEY = 'codeaip_chat_external_draft_v1'
+const DEFAULT_SYSTEM_PROMPT = `你是 CodeAip 项目的内置 AI 助理，同时也是一个偏工程落地的高级工程师。
+
+你的职责：
+1. 帮用户分析和排查 CodeAip 里的报错、请求失败、模型映射问题、鉴权问题、上下游联调问题。
+2. 帮用户设计或修改这个项目的后台功能、接口行为、管理台页面、交互细节和数据流。
+3. 当用户贴出日志、错误内容、接口返回、代码片段时，优先做技术判断，不要空泛安慰。
+4. 当问题和这个项目直接相关时，回答要尽量结合本项目场景：本地 Key、上游 provider、模型映射、OpenAI 兼容接口、聊天页、请求日志、流式输出、重试、管理后台。
+
+回答风格要求：
+- 默认用中文，直接、清楚、不绕弯。
+- 先下判断，再讲原因，再给可执行方案。
+- 尽量给出排查顺序、修改建议、影响范围。
+- 如果信息不够，明确说缺什么，不要乱编。
+- 如果有多个可能原因，按优先级列出来。
+- 如果用户是在排障，优先给“先检查什么、再看什么、最后怎么改”。
+- 如果用户是在做功能，优先给“怎么设计、改哪里、注意什么边界情况”。
+
+输出偏好：
+- 简洁为主，但别省掉关键结论。
+- 能给步骤就给步骤。
+- 能给代码改动点，就明确到模块、页面、接口或状态流。
+- 不要假装已经执行了未执行的操作。
+
+你的目标不是泛泛聊天，而是作为 CodeAip 这个项目的长期助理和工程搭子，帮助用户更快定位问题、推进实现、减少试错。`
 
 const localKeys = ref([])
 const selectedLocalKeyId = ref('')
 const model = ref('')
 const modelByLocalKey = ref({})
-const systemPrompt = ref('')
+const systemPrompt = ref(DEFAULT_SYSTEM_PROMPT)
 const draft = ref('')
 const streamMode = ref(true)
 const retryCount = ref(3)
@@ -206,6 +270,8 @@ const chatShellVars = computed(() => {
   }
 })
 
+// 切换本地 Key 时，记住上一个 Key 对应的模型选择；
+// 再给新 Key 恢复上次用过的模型，或者退回默认建议模型。
 watch(selectedLocalKeyId, async (newId, oldId) => {
   if (oldId) {
     modelByLocalKey.value = {
@@ -234,6 +300,8 @@ watch(model, (value) => {
   }
 })
 
+// 这里是聊天页的本地保存入口。
+// 只要聊天记录、系统提示词、流式开关、key/model、重试次数变化，就写回 localStorage。
 watch([history, systemPrompt, streamMode, selectedLocalKeyId, model, retryCount], () => {
   persistState()
 }, { deep: true })
@@ -256,6 +324,8 @@ function safeJsonParse(value, fallback) {
   }
 }
 
+// 持久化时只写本地存储，不直接回写响应式源，
+// 避免出现 watch -> persistState -> 再改源 -> 再触发 watch 的自循环。
 function persistState() {
   const nextModelByLocalKey = selectedLocalKeyId.value
     ? {
@@ -275,6 +345,8 @@ function persistState() {
   }))
 }
 
+// 页面首次进入时，从 localStorage 恢复聊天记录和设置。
+// 如果没存过系统提示词，就退回 DEFAULT_SYSTEM_PROMPT。
 function restoreState() {
   const savedHistory = safeJsonParse(localStorage.getItem(CHAT_STORAGE_KEY) || '[]', [])
   const savedSettings = safeJsonParse(localStorage.getItem(CHAT_SETTINGS_KEY) || '{}', {})
@@ -285,7 +357,7 @@ function restoreState() {
     ? savedSettings.modelByLocalKey
     : {}
   model.value = savedSettings.model || modelByLocalKey.value[selectedLocalKeyId.value] || ''
-  systemPrompt.value = savedSettings.systemPrompt || ''
+  systemPrompt.value = savedSettings.systemPrompt || DEFAULT_SYSTEM_PROMPT
   streamMode.value = savedSettings.streamMode !== undefined ? !!savedSettings.streamMode : true
   retryCount.value = Number.isFinite(Number(savedSettings.retryCount)) ? Math.max(0, Math.min(5, Number(savedSettings.retryCount))) : 3
 }
@@ -432,6 +504,21 @@ function applyStarter(text) {
   draft.value = text
 }
 
+function consumeExternalDraft() {
+  const raw = localStorage.getItem(CHAT_EXTERNAL_DRAFT_STORAGE_KEY)
+  if (!raw) return false
+
+  const payload = safeJsonParse(raw, null)
+  if (!payload?.text) {
+    localStorage.removeItem(CHAT_EXTERNAL_DRAFT_STORAGE_KEY)
+    return false
+  }
+
+  draft.value = payload.text
+  localStorage.removeItem(CHAT_EXTERNAL_DRAFT_STORAGE_KEY)
+  return true
+}
+
 function retryFromUserMessage(item) {
   if (!item?.content || sending.value) return
   draft.value = item.content
@@ -442,10 +529,14 @@ function showBubbleToolbar(item) {
   return (item?.role === 'assistant' || item?.role === 'user') && Boolean(item?.content)
 }
 
+// 等浏览器完成一帧绘制。流式渲染里会用到，
+// 不只是等 Vue nextTick，还要等真正 paint 之后再做滚动之类的操作。
 async function waitForPaint() {
   await new Promise(resolve => requestAnimationFrame(() => resolve()))
 }
 
+// 把消息列表滚到最底部。聊天页里很多地方会重复调用它，
+// 因为消息内容、Markdown、高度恢复都可能在不同时间点改变 scrollHeight。
 async function scrollToBottom() {
   await nextTick()
   const el = messagesRef.value
@@ -481,6 +572,8 @@ function clearHistory() {
   persistState()
 }
 
+// 根据当前视口动态计算聊天面板高度。
+// 这里会影响消息列表可视区域；如果布局频繁变动，也可能间接影响流式时的重排节奏。
 function updateChatViewportHeight() {
   if (typeof window === 'undefined') return
   const shellEl = chatShellRef.value
@@ -516,6 +609,8 @@ function extractUsage(data) {
   }
 }
 
+// 自动重试判断：只针对更像“暂时性失败”的情况（5xx/429/408/超时/网络/TLS 等）。
+// 手动停止、明显不该重试的错误，不会走这里。
 function shouldRetryRequest(err) {
   if (!err || err?.name === 'AbortError' || stopRequested.value) return false
   const status = Number(err?.status || 0)
@@ -594,6 +689,7 @@ function buildErrorState(err, fallbackPrompt = '') {
   }
 }
 
+// 非流式：等接口完整返回后，一次性把助手内容塞进 assistantMessage.content。
 async function sendNonStream(rawKey, messages, assistantMessage, requestModel) {
   const res = await fetch('/v1/chat/completions', {
     method: 'POST',
@@ -619,6 +715,9 @@ async function sendNonStream(rawKey, messages, assistantMessage, requestModel) {
   assistantMessage.usage = extractUsage(data)
 }
 
+// 这是“显示层节奏控制”，不是 SSE 网络层节奏。
+// 就算上游 chunk 已经到了，这里也会按内容再做一点点人为延时，
+// 所以它本身就是影响“看起来是不是整段出来”的可疑点之一。
 function getStreamChunkDelay(chunk) {
   if (!chunk || /^\s+$/.test(chunk)) return 0
   if (/[，。！？；：,.!?;:]$/.test(chunk)) return 42
@@ -627,6 +726,8 @@ function getStreamChunkDelay(chunk) {
   return 11
 }
 
+// 把单次拿到的 delta 再拆成更小片段，交给前端逐段渲染。
+// 注意：这里拆得越碎，DOM 更新越频繁；如果布局/滚动也很频繁，就更容易卡成“看起来后面才一起出来”。
 function splitForDisplay(text = '') {
   const result = []
   let buffer = ''
@@ -643,6 +744,11 @@ function splitForDisplay(text = '') {
   return result
 }
 
+// 真正把 queue 里的流式文本一点点刷到 UI 的地方。
+// 读取网络流和渲染 UI 是分开的：
+// - sendStream 负责 reader.read() + buffer 拆包 + queue.push()
+// - pumpStreamQueue 负责 assistantMessage.content += chunk
+// 如果问题表现为“数据到了但页面没及时显示”，这里就是重点嫌疑区之一。
 async function pumpStreamQueue(assistantMessage, queue, state) {
   if (state.running) return
   state.running = true
@@ -674,6 +780,13 @@ async function pumpStreamQueue(assistantMessage, queue, state) {
   state.running = false
 }
 
+// 流式主流程：
+// 1. fetch 拿到 ReadableStream
+// 2. reader.read() 持续读取原始字节
+// 3. 用 decoder + buffer 拼接成字符串
+// 4. flushBuffer 按 SSE 事件边界拆包
+// 5. handlePayload 取出 delta，塞进 queue
+// 6. pumpStreamQueue 再把 queue 渲染到页面
 async function sendStream(rawKey, messages, assistantMessage, requestModel) {
   const res = await fetch('/v1/chat/completions', {
     method: 'POST',
@@ -703,6 +816,8 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
   let buffer = ''
   let finalUsage = null
 
+  // 处理单条 SSE data: 后面的 JSON 负载。
+  // 这里只负责“解析 -> 把 delta 放进 queue”，不直接碰 DOM。
   const handlePayload = (payload) => {
     if (!payload || payload === '[DONE]') return
 
@@ -720,6 +835,10 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
     }
   }
 
+  // 把 buffer 里累计的文本按 SSE 事件切开。
+  // 当前逻辑是按 \n\n 分块，再从每块里找 data: 行。
+  // 如果上游/代理层交付节奏和这里预期不一致，就可能出现：
+  // 数据其实到了，但得等到攒够分隔符才会进入 handlePayload。
   const flushBuffer = (force = false) => {
     const normalized = force ? buffer : buffer.replace(/\r\n/g, '\n')
     const parts = normalized.split(/\n\n/)
@@ -740,6 +859,8 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
     buffer = force ? '' : (parts.at(-1) || '')
   }
 
+  // 这里是网络读取循环：只负责把字节流读进来并累积到 buffer。
+  // 如果想判断“是不是后端压根没流”，这里最适合加时间戳日志。
   while (true) {
     const { value, done } = await reader.read()
     if (done) break
@@ -756,6 +877,10 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
   if (finalUsage) assistantMessage.usage = finalUsage
 }
 
+// 发送消息总入口：
+// - 先快照当前 key/model/draft，避免用户中途切换 UI 导致本次请求用到新值
+// - 再根据 streamMode 走 sendStream 或 sendNonStream
+// - 失败时按 retryCount 做有限重试
 async function sendMessage() {
   await nextTick()
 
@@ -796,6 +921,7 @@ async function sendMessage() {
 
     let success = false
     let lastError = null
+    // 自动重试发生在这里：一次发送请求里，最多走 retryCount + 1 轮尝试。
     for (let attempt = 0; attempt <= retryCount.value; attempt += 1) {
       assistantMessage.retryCount = attempt
       assistantMessage.pending = true
@@ -858,6 +984,7 @@ async function sendMessage() {
   }
 }
 
+// 首次进入聊天页：恢复状态、拉本地 Key、计算高度、接收外部草稿、滚到底。
 onMounted(async () => {
   restoreState()
   localKeys.value = await adminApi.getLocalKeys().catch(() => [])
@@ -867,12 +994,40 @@ onMounted(async () => {
   await nextTick()
   updateChatViewportHeight()
   window.addEventListener('resize', updateChatViewportHeight)
+  if (route.query.autofill === 'error-log') {
+    if (consumeExternalDraft()) {
+      await nextTick()
+      router.replace({ name: 'chat', query: {} }).catch(() => {})
+    }
+  }
   await scrollToBottom()
+  requestAnimationFrame(() => {
+    scrollToBottom()
+  })
 })
 
 watch([errorState, draft], async () => {
   await nextTick()
   updateChatViewportHeight()
+})
+
+// keep-alive 下从其他菜单切回聊天页时，会走 onActivated。
+// 这里会重新处理外部草稿、高度恢复、滚到底。
+// 你之前观察到“切出去再回来会吐一部分流式文本”，
+// 这说明重新激活/重绘很可能参与了当前流式显示异常。
+onActivated(async () => {
+  if (route.query.autofill === 'error-log') {
+    if (consumeExternalDraft()) {
+      await nextTick()
+      router.replace({ name: 'chat', query: {} }).catch(() => {})
+    }
+  }
+  updateChatViewportHeight()
+  await nextTick()
+  await scrollToBottom()
+  requestAnimationFrame(() => {
+    scrollToBottom()
+  })
 })
 
 onUnmounted(() => {

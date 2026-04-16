@@ -204,19 +204,49 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="rawKeyVisible" title="新 Key 已生成" width="560px">
-      <div class="result-card is-success no-top-margin">
-        <div class="result-card-title">这次真的只显示这一回</div>
-        <div class="result-card-desc">赶紧复制走，后面再想看就得走“显示明文”接口了。</div>
-        <div class="raw-key-box">{{ latestRawKey }}</div>
+    <el-dialog v-model="rawKeyVisible" title="Key 已生成" width="620px" class="key-delivery-dialog">
+      <div class="result-card is-success no-top-margin key-delivery-card">
+        <div class="key-delivery-head">
+          <div>
+            <div class="result-card-title">这个 Key 的明文只建议你现在处理掉</div>
+            <div class="result-card-desc">适合立刻复制到密码库、环境变量或安全备忘里。关掉弹窗后，不建议再到处翻明文。</div>
+          </div>
+          <span class="state-chip is-on">敏感信息</span>
+        </div>
+
+        <div class="key-delivery-summary">
+          <div class="key-delivery-item">
+            <span class="key-delivery-label">Key 名称</span>
+            <span class="key-delivery-value">{{ latestRawKeyName || '未命名 Key' }}</span>
+          </div>
+          <div class="key-delivery-item">
+            <span class="key-delivery-label">本次操作</span>
+            <span class="key-delivery-value">{{ latestRawKeyAction }}</span>
+          </div>
+        </div>
+
+        <div class="key-delivery-code-shell">
+          <div class="key-delivery-code-head">
+            <span class="key-delivery-code-label">Key 明文</span>
+            <button class="action-link" type="button" @click="copyLatestRawKey">复制</button>
+          </div>
+          <div class="raw-key-box">{{ latestRawKey }}</div>
+        </div>
+
         <div class="key-delivery-tips">
           <span class="mini-tag">建议立即复制到安全位置</span>
           <span class="mini-tag">不要直接贴群里</span>
-          <span class="mini-tag">丢了可以重置，但旧 Key 会失效</span>
+          <span class="mini-tag">如果是重置，旧 Key 已失效</span>
         </div>
+
+        <div class="key-delivery-notice">
+          <div class="key-delivery-notice-title">建议你现在就做一件事</div>
+          <div class="key-delivery-notice-desc">复制后，马上放进密码管理器、部署面板或 `.env`，别只靠脑子记。</div>
+        </div>
+
         <div class="raw-key-actions">
-          <el-button type="primary" @click="copyLatestRawKey">复制这个 Key</el-button>
-          <el-button @click="rawKeyVisible = false">我记住了</el-button>
+          <el-button type="primary" @click="copyLatestRawKey">复制并关闭</el-button>
+          <el-button @click="rawKeyVisible = false">稍后处理</el-button>
         </div>
       </div>
     </el-dialog>
@@ -238,6 +268,8 @@ const editingId = ref('')
 const mappingRows = ref([])
 const rawKeyVisible = ref(false)
 const latestRawKey = ref('')
+const latestRawKeyName = ref('')
+const latestRawKeyAction = ref('新建 Key')
 const form = reactive({ name: '', remark: '', enabled: true, upstreamBindings: [], defaultUpstreamId: '' })
 
 const enabledCount = computed(() => rows.value.filter(item => item.enabled).length)
@@ -378,14 +410,49 @@ function openEdit(row) {
   visible.value = true
 }
 
+function validateForm() {
+  const name = String(form.name || '').trim()
+  if (!name) {
+    ElMessage.warning('先填 Key 名称')
+    return false
+  }
+
+  if (!Array.isArray(form.upstreamBindings) || !form.upstreamBindings.length) {
+    ElMessage.warning('至少绑定一个上游')
+    return false
+  }
+
+  if (!form.defaultUpstreamId) {
+    ElMessage.warning('选一个默认上游')
+    return false
+  }
+
+  const invalidMapping = mappingRows.value.find(item => {
+    const localModel = String(item.localModel || '').trim()
+    const upstreamModel = String(item.upstreamModel || '').trim()
+    return (localModel && !upstreamModel) || (!localModel && upstreamModel)
+  })
+
+  if (invalidMapping) {
+    ElMessage.warning('模型映射不要只填一半，本地模型名和上游模型名要成对出现')
+    return false
+  }
+
+  return true
+}
+
 async function save() {
+  if (!validateForm()) return
+
   saving.value = true
   try {
-    const payload = { ...form, modelMappings: getCleanMappings() }
+    const payload = { ...form, name: String(form.name || '').trim(), remark: String(form.remark || '').trim(), modelMappings: getCleanMappings() }
     const res = editingId.value ? await adminApi.updateLocalKey(editingId.value, payload) : await adminApi.createLocalKey(payload)
     if (res.rawKey) {
       revealedKeys.value[res.id] = res.rawKey
       latestRawKey.value = res.rawKey
+      latestRawKeyName.value = payload.name || res.name || '未命名 Key'
+      latestRawKeyAction.value = editingId.value ? '更新并返回明文' : '新建 Key'
       rawKeyVisible.value = true
     }
     ElMessage.success('保存成功')
@@ -402,6 +469,7 @@ async function copyLatestRawKey() {
   const copied = await copyText(latestRawKey.value)
   if (!copied) throw new Error('复制失败，请手动复制')
   ElMessage.success('Key 已复制')
+  rawKeyVisible.value = false
 }
 
 async function toggle(row) {
@@ -414,6 +482,8 @@ async function regenerate(row) {
   const res = await adminApi.regenerateLocalKey(row.id)
   revealedKeys.value[row.id] = res.rawKey
   latestRawKey.value = res.rawKey
+  latestRawKeyName.value = row.name || '未命名 Key'
+  latestRawKeyAction.value = '重置 Key'
   rawKeyVisible.value = true
   ElMessage.success('Key 已重置')
   await load()

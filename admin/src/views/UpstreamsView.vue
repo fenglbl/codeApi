@@ -196,7 +196,10 @@ function normalizeModels(list) {
 
 function addModel() {
   const value = String(newModelName.value || '').trim()
-  if (!value) return
+  if (!value) {
+    ElMessage.warning('先输入模型名')
+    return
+  }
   if (modelRows.value.includes(value)) {
     ElMessage.warning(`模型「${value}」已经有了`)
     return
@@ -245,17 +248,74 @@ function openEdit(row) {
   visible.value = true
 }
 
+function normalizeBaseUrl(url) {
+  return String(url || '').trim().replace(/\/+$/, '')
+}
+
+function mapUpstreamError(err, fallback = '操作失败') {
+  const rawMessage = String(err?.message || err?.data?.message || '').trim()
+  const lowered = rawMessage.toLowerCase()
+
+  if (!rawMessage) return fallback
+  if (lowered.includes('duplicate key')) return '名称已存在，换一个上游名称试试'
+  if (lowered.includes('validation failed')) return '提交内容没过校验，检查名称、Base URL 和 API Key'
+  if (lowered.includes('invalid url') || lowered.includes('failed to parse url')) return 'Base URL 格式不对，填完整协议和地址'
+  if (lowered.includes('unauthorized') || lowered.includes('invalid api key') || lowered.includes('incorrect api key')) return 'API Key 不对，鉴权没过'
+  if (lowered.includes('timeout') || lowered.includes('timed out') || lowered.includes('etimedout')) return '请求超时了，检查网络或稍后再试'
+  if (lowered.includes('fetch failed') || lowered.includes('network') || lowered.includes('econnrefused') || lowered.includes('socket')) return '连不上这个上游，检查 Base URL、网络或服务状态'
+  if (lowered.includes('not found')) return '目标资源不存在，检查 Base URL 是否填对了'
+
+  return rawMessage || fallback
+}
+
+function validateForm() {
+  const name = String(form.name || '').trim()
+  const baseUrl = normalizeBaseUrl(form.baseUrl)
+  const apiKey = String(form.apiKey || '').trim()
+
+  if (!name) {
+    ElMessage.warning('先填上游名称')
+    return false
+  }
+
+  if (!baseUrl) {
+    ElMessage.warning('先填 Base URL')
+    return false
+  }
+
+  if (!/^https?:\/\//i.test(baseUrl)) {
+    ElMessage.warning('Base URL 要带 http:// 或 https://')
+    return false
+  }
+
+  if (!editingId.value && !apiKey) {
+    ElMessage.warning('新增上游时要填 API Key')
+    return false
+  }
+
+  return true
+}
+
 async function save() {
+  if (!validateForm()) return
+
   saving.value = true
   try {
-    const payload = { ...form, models: normalizeModels(modelRows.value) }
+    const payload = {
+      ...form,
+      name: String(form.name || '').trim(),
+      baseUrl: normalizeBaseUrl(form.baseUrl),
+      apiKey: String(form.apiKey || '').trim(),
+      remark: String(form.remark || '').trim(),
+      models: normalizeModels(modelRows.value)
+    }
     if (editingId.value) await adminApi.updateUpstream(editingId.value, payload)
     else await adminApi.createUpstream(payload)
     ElMessage.success('保存成功')
     visible.value = false
     await load()
   } catch (err) {
-    ElMessage.error(err.message || '保存失败')
+    ElMessage.error(mapUpstreamError(err, '保存失败'))
   } finally {
     saving.value = false
   }
@@ -270,8 +330,9 @@ async function runTest() {
     testResult.value = res
     ElMessage.success('连接测试完成')
   } catch (err) {
-    testResult.value = { ok: false, message: err.message || '连接测试失败' }
-    ElMessage.error(err.message || '连接测试失败')
+    const message = mapUpstreamError(err, '连接测试失败')
+    testResult.value = { ok: false, message }
+    ElMessage.error(message)
   } finally {
     testLoading.value = false
   }
@@ -288,7 +349,7 @@ async function syncModels() {
     ElMessage.success(`已同步 ${res.modelCount || 0} 个模型`)
     await load()
   } catch (err) {
-    ElMessage.error(err.message || '获取模型列表失败')
+    ElMessage.error(mapUpstreamError(err, '获取模型列表失败'))
   } finally {
     modelsLoading.value = false
   }
@@ -299,7 +360,7 @@ async function runQuickTest(row) {
     const res = await adminApi.testUpstream(row.id)
     ElMessage.success(`连接正常，延迟 ${res.latencyMs} ms`)
   } catch (err) {
-    ElMessage.error(err.message || '连接测试失败')
+    ElMessage.error(mapUpstreamError(err, '连接测试失败'))
   }
 }
 
@@ -309,14 +370,18 @@ async function runQuickSync(row) {
     ElMessage.success(`已同步 ${res.modelCount || 0} 个模型`)
     await load()
   } catch (err) {
-    ElMessage.error(err.message || '同步失败')
+    ElMessage.error(mapUpstreamError(err, '同步失败'))
   }
 }
 
 async function toggle(row) {
-  await adminApi.toggleUpstream(row.id)
-  ElMessage.success('状态已更新')
-  await load()
+  try {
+    await adminApi.toggleUpstream(row.id)
+    ElMessage.success('状态已更新')
+    await load()
+  } catch (err) {
+    ElMessage.error(mapUpstreamError(err, '状态更新失败'))
+  }
 }
 
 async function remove(row) {
@@ -326,7 +391,7 @@ async function remove(row) {
     ElMessage.success('已删除')
     await load()
   } catch (err) {
-    ElMessage.error(err.message || '删除失败')
+    ElMessage.error(mapUpstreamError(err, '删除失败'))
   }
 }
 

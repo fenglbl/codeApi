@@ -7,7 +7,7 @@
             <div class="quick-filter-title">快速筛选</div>
             <div class="muted">常用视角一把切，少点几下。</div>
           </div>
-          <el-button @click="load" :loading="loading">刷新</el-button>
+          <el-button class="toolbar-ghost-btn" @click="load" :loading="loading">刷新</el-button>
         </div>
         <div class="quick-filter-chips">
           <button class="quick-chip" :class="quickMode === 'all' ? 'is-active' : ''" type="button" @click="applyQuickFilter('all')">全部</button>
@@ -39,8 +39,8 @@
             <el-option v-for="item in upstreams" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
           <div class="log-filter-actions">
-            <el-button type="primary" @click="load" :loading="loading">查询</el-button>
-            <el-button @click="resetFilters">重置</el-button>
+            <el-button type="primary" class="toolbar-primary-btn" @click="load" :loading="loading">查询</el-button>
+            <el-button class="toolbar-ghost-btn" @click="resetFilters">重置</el-button>
           </div>
         </div>
 
@@ -94,15 +94,15 @@
             <template #default="scope">
               <div class="metric-pair metric-pair-mono">{{ formatTokenPair(scope.row) }}</div>
               <div class="log-metric-meta">
-                <span class="metric-badge">缓存读 {{ scope.row.cacheReadTokens || 0 }}</span>
+                <span class="metric-badge">缓存读 {{ formatNumber(scope.row.cacheReadTokens) }}</span>
               </div>
             </template>
           </el-table-column>
           <el-table-column label="字数" min-width="150">
             <template #default="scope">
               <div class="metric-stack">
-                <div><span class="metric-label">入</span><span class="metric-value metric-pair-mono">{{ scope.row.inputChars || 0 }}</span></div>
-                <div><span class="metric-label">出</span><span class="metric-value metric-pair-mono">{{ scope.row.outputChars || 0 }}</span></div>
+                <div><span class="metric-label">入</span><span class="metric-value metric-pair-mono">{{ formatNumber(scope.row.inputChars) }}</span></div>
+                <div><span class="metric-label">出</span><span class="metric-value metric-pair-mono">{{ formatNumber(scope.row.outputChars) }}</span></div>
               </div>
             </template>
           </el-table-column>
@@ -132,6 +132,7 @@
                     {{ expandedErrors[scope.row.id] ? '收起' : '展开' }}
                   </button>
                   <button class="log-expand-btn" type="button" @click="copyText(scope.row.errorMessage)">复制</button>
+                  <button class="log-expand-btn is-primary" type="button" @click="askAi(scope.row)">问AI</button>
                 </div>
               </div>
               <span v-else class="muted">--</span>
@@ -145,8 +146,8 @@
           <div class="empty-state-title">这会儿还没可看的日志</div>
           <div class="empty-state-desc">要么还没产生请求，要么你这轮筛选太狠了。点重置或者先打一条请求试试。</div>
           <div class="empty-state-actions">
-            <el-button type="primary" @click="resetFilters">重置筛选</el-button>
-            <el-button @click="load">刷新</el-button>
+            <el-button type="primary" class="toolbar-primary-btn" @click="resetFilters">重置筛选</el-button>
+            <el-button class="toolbar-ghost-btn" @click="load">刷新</el-button>
           </div>
         </div>
       </div>
@@ -155,10 +156,15 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AppLayout from '../components/AppLayout.vue'
 import { adminApi } from '../services/adminApi'
+
+const router = useRouter()
+const CHAT_DRAFT_STORAGE_KEY = 'codeaip_chat_external_draft_v1'
+const REQUEST_LOGS_UI_STORAGE_KEY = 'codeaip_request_logs_ui_v1'
 
 const rows = ref([])
 const loading = ref(false)
@@ -183,15 +189,39 @@ const displayRows = computed(() => {
   return rows.value
 })
 
+function safeJsonParse(value, fallback) {
+  try {
+    return JSON.parse(value)
+  } catch (_) {
+    return fallback
+  }
+}
+
+function restoreUiState() {
+  const saved = safeJsonParse(localStorage.getItem(REQUEST_LOGS_UI_STORAGE_KEY) || '{}', {})
+  compactMode.value = saved.compactMode !== undefined ? !!saved.compactMode : false
+}
+
+function persistUiState() {
+  localStorage.setItem(REQUEST_LOGS_UI_STORAGE_KEY, JSON.stringify({
+    compactMode: compactMode.value
+  }))
+}
+
 function formatTime(value) {
   if (!value) return '--'
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
+function formatNumber(value) {
+  const num = Number(value) || 0
+  return num.toLocaleString('en-US')
+}
+
 function formatTokenPair(row) {
   const prompt = row?.promptTokens || 0
   const completion = row?.completionTokens || 0
-  return `${prompt} / ${completion}`
+  return `${formatNumber(prompt)} / ${formatNumber(completion)}`
 }
 
 function formatLatency(row) {
@@ -275,6 +305,47 @@ async function copyText(text) {
   }
 }
 
+function buildAiQuestion(row) {
+  const parts = [
+    '帮我分析下面这个 CodeAip 请求错误，并给出排查思路、可能原因、修复建议。',
+    '',
+    `请求时间：${formatTime(row.createdAt)}`,
+    `请求路径：${row.path || '--'}`,
+    `模型：${row.model || '--'}`,
+    `本地 Key：${row.localKey?.name || '--'}${row.localKey?.keyPrefix ? ` (${row.localKey.keyPrefix})` : ''}`,
+    `上游：${row.upstream?.name || '--'}`,
+    `状态码：${row.statusCode || '--'}`,
+    `是否流式：${row.isStream ? '是' : '否'}`,
+    `耗时：${formatLatency(row)}`,
+    '',
+    '错误内容：',
+    row.errorMessage || '--',
+    '',
+    '请按这个格式回答：',
+    '1. 问题判断',
+    '2. 最可能原因（按优先级排序）',
+    '3. 建议我先检查什么',
+    '4. 如果要修代码，建议改哪里'
+  ]
+
+  return parts.join('\n')
+}
+
+async function askAi(row) {
+  try {
+    const prompt = buildAiQuestion(row)
+    localStorage.setItem(CHAT_DRAFT_STORAGE_KEY, JSON.stringify({
+      text: prompt,
+      createdAt: Date.now(),
+      source: 'request-log-error'
+    }))
+    await router.push({ name: 'chat', query: { autofill: 'error-log' } })
+    ElMessage.success('已把错误带到聊天页')
+  } catch (_) {
+    ElMessage.error('跳转聊天页失败')
+  }
+}
+
 function tableRowClassName({ row }) {
   if (row.statusCode >= 500) return 'log-row-danger'
   if (row.statusCode >= 400) return 'log-row-warning'
@@ -313,8 +384,13 @@ function resetFilters() {
   load()
 }
 
+watch(compactMode, () => {
+  persistUiState()
+})
+
 onMounted(async () => {
   try {
+    restoreUiState()
     await loadOptions()
     await load()
   } catch (err) {

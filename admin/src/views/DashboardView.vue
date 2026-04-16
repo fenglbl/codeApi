@@ -8,18 +8,18 @@
       </div>
       <div class="stat-card">
         <div class="stat-label">上游</div>
-        <div class="stat-value">{{ upstreamCount }}</div>
-        <div class="overview-sub">启用 {{ enabledUpstreamCount }} / 已同步模型 {{ syncedUpstreamCount }}</div>
+        <div class="stat-value">{{ formatNumber(upstreamCount) }}</div>
+        <div class="overview-sub">启用 {{ formatNumber(enabledUpstreamCount) }} / 已同步模型 {{ formatNumber(syncedUpstreamCount) }}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">本地 Keys</div>
-        <div class="stat-value">{{ localKeyCount }}</div>
-        <div class="overview-sub">启用 {{ enabledLocalKeyCount }} / 映射 {{ totalMappings }} 条</div>
+        <div class="stat-value">{{ formatNumber(localKeyCount) }}</div>
+        <div class="overview-sub">启用 {{ formatNumber(enabledLocalKeyCount) }} / 映射 {{ formatNumber(totalMappings) }} 条</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">当前范围请求</div>
-        <div class="stat-value">{{ totalRequests }}</div>
-        <div class="overview-sub">成功 {{ successRequests }} / 异常 {{ failedRequests }}</div>
+        <div class="stat-value">{{ formatNumber(totalRequests) }}</div>
+        <div class="overview-sub">成功 {{ formatNumber(successRequests) }} / 异常 {{ formatNumber(failedRequests) }}</div>
       </div>
     </div>
 
@@ -77,19 +77,19 @@
             </div>
             <div class="dashboard-kpi-item">
               <span class="dashboard-kpi-label">流式请求</span>
-              <span class="dashboard-kpi-value">{{ streamRequests }}</span>
+              <span class="dashboard-kpi-value">{{ formatNumber(streamRequests) }}</span>
             </div>
             <div class="dashboard-kpi-item">
               <span class="dashboard-kpi-label">总 Token</span>
-              <span class="dashboard-kpi-value">{{ totalTokens }}</span>
+              <span class="dashboard-kpi-value">{{ formatNumber(totalTokens) }}</span>
             </div>
             <div class="dashboard-kpi-item">
               <span class="dashboard-kpi-label">总输入字符</span>
-              <span class="dashboard-kpi-value">{{ totalInputChars }}</span>
+              <span class="dashboard-kpi-value">{{ formatNumber(totalInputChars) }}</span>
             </div>
             <div class="dashboard-kpi-item">
               <span class="dashboard-kpi-label">总输出字符</span>
-              <span class="dashboard-kpi-value">{{ totalOutputChars }}</span>
+              <span class="dashboard-kpi-value">{{ formatNumber(totalOutputChars) }}</span>
             </div>
           </div>
         </div>
@@ -109,7 +109,7 @@
                 <div class="primary-cell">{{ item.name }}</div>
                 <div class="cell-sub">{{ item.baseUrl || '--' }}</div>
               </div>
-              <span class="metric-badge">{{ item.count }} 次</span>
+              <span class="metric-badge">{{ formatNumber(item.count) }} 次</span>
             </div>
           </div>
           <div v-else class="inline-empty-tip">还没有足够的日志数据。</div>
@@ -130,7 +130,7 @@
                 <div class="primary-cell">{{ item.name }}</div>
                 <div class="cell-sub">{{ item.keyPrefix || '--' }}</div>
               </div>
-              <span class="metric-badge">{{ item.count }} 次</span>
+              <span class="metric-badge">{{ formatNumber(item.count) }} 次</span>
             </div>
           </div>
           <div v-else class="inline-empty-tip">还没有足够的日志数据。</div>
@@ -202,6 +202,11 @@ function formatBucketKey(date, unit) {
 function formatBucketLabel(date, unit) {
   if (unit === 'day') return `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
   return `${pad(date.getHours())}:00`
+}
+
+function formatNumber(value) {
+  const num = Number(value) || 0
+  return num.toLocaleString('en-US')
 }
 
 function formatCompactNumber(value) {
