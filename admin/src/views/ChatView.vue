@@ -133,6 +133,11 @@
         <el-form-item label="输出模式">
           <el-switch v-model="streamMode" active-text="流式输出" inactive-text="非流输出" />
         </el-form-item>
+
+        <el-form-item label="失败自动重试次数">
+          <el-input-number v-model="retryCount" :min="0" :max="5" :step="1" />
+          <div class="cell-sub">仅在生成阶段接口返回错误时生效。填 0 就是不重试。</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="settingsVisible = false">关闭</el-button>
@@ -142,6 +147,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'chat' })
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import AppLayout from '../components/AppLayout.vue'
@@ -153,9 +159,11 @@ const CHAT_SETTINGS_KEY = 'codeaip_chat_settings_v1'
 const localKeys = ref([])
 const selectedLocalKeyId = ref('')
 const model = ref('')
+const modelByLocalKey = ref({})
 const systemPrompt = ref('')
 const draft = ref('')
 const streamMode = ref(true)
+const retryCount = ref(3)
 const settingsVisible = ref(false)
 const sending = ref(false)
 const errorState = ref(null)
@@ -199,6 +207,13 @@ const chatShellVars = computed(() => {
 })
 
 watch(selectedLocalKeyId, async (newId, oldId) => {
+  if (oldId) {
+    modelByLocalKey.value = {
+      ...modelByLocalKey.value,
+      [oldId]: model.value
+    }
+  }
+
   await nextTick()
   const value = selectedLocalKey.value
   if (!newId) {
@@ -206,13 +221,20 @@ watch(selectedLocalKeyId, async (newId, oldId) => {
     return
   }
 
-  const nextModel = value?.modelMappings?.[0]?.localModel || value?.defaultUpstreamId?.models?.[0] || value?.upstreamBindings?.[0]?.models?.[0] || ''
-  if (!oldId || newId !== oldId) {
-    model.value = nextModel
+  const rememberedModel = modelByLocalKey.value[newId]
+  const fallbackModel = value?.modelMappings?.[0]?.localModel || value?.defaultUpstreamId?.models?.[0] || value?.upstreamBindings?.[0]?.models?.[0] || ''
+  model.value = rememberedModel || fallbackModel
+})
+
+watch(model, (value) => {
+  if (!selectedLocalKeyId.value) return
+  modelByLocalKey.value = {
+    ...modelByLocalKey.value,
+    [selectedLocalKeyId.value]: value
   }
 })
 
-watch([history, systemPrompt, streamMode, selectedLocalKeyId, model], () => {
+watch([history, systemPrompt, streamMode, selectedLocalKeyId, model, retryCount], () => {
   persistState()
 }, { deep: true })
 
@@ -235,12 +257,21 @@ function safeJsonParse(value, fallback) {
 }
 
 function persistState() {
+  const nextModelByLocalKey = selectedLocalKeyId.value
+    ? {
+        ...modelByLocalKey.value,
+        [selectedLocalKeyId.value]: model.value
+      }
+    : modelByLocalKey.value
+
   localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(history.value.slice(-80)))
   localStorage.setItem(CHAT_SETTINGS_KEY, JSON.stringify({
     selectedLocalKeyId: selectedLocalKeyId.value,
     model: model.value,
+    modelByLocalKey: nextModelByLocalKey,
     systemPrompt: systemPrompt.value,
-    streamMode: streamMode.value
+    streamMode: streamMode.value,
+    retryCount: retryCount.value
   }))
 }
 
@@ -250,9 +281,13 @@ function restoreState() {
 
   history.value = Array.isArray(savedHistory) ? savedHistory : []
   selectedLocalKeyId.value = savedSettings.selectedLocalKeyId || ''
-  model.value = savedSettings.model || ''
+  modelByLocalKey.value = savedSettings.modelByLocalKey && typeof savedSettings.modelByLocalKey === 'object'
+    ? savedSettings.modelByLocalKey
+    : {}
+  model.value = savedSettings.model || modelByLocalKey.value[selectedLocalKeyId.value] || ''
   systemPrompt.value = savedSettings.systemPrompt || ''
   streamMode.value = savedSettings.streamMode !== undefined ? !!savedSettings.streamMode : true
+  retryCount.value = Number.isFinite(Number(savedSettings.retryCount)) ? Math.max(0, Math.min(5, Number(savedSettings.retryCount))) : 3
 }
 
 function createMessage(role, content, extra = {}) {
@@ -481,6 +516,18 @@ function extractUsage(data) {
   }
 }
 
+function shouldRetryRequest(err) {
+  if (!err || err?.name === 'AbortError' || stopRequested.value) return false
+  const status = Number(err?.status || 0)
+  if (status >= 500 || status === 429 || status === 408) return true
+
+  const rawDetail = typeof err?.data === 'string'
+    ? err.data
+    : JSON.stringify(err?.data || { message: err?.message || '请求失败' }, null, 2)
+  const lowered = String(rawDetail || '').toLowerCase()
+  return ['timeout', 'socket', 'tls', 'network', 'overloaded', 'temporarily unavailable'].some(keyword => lowered.includes(keyword))
+}
+
 function buildErrorState(err, fallbackPrompt = '') {
   if (err?.name === 'AbortError' || stopRequested.value) {
     return {
@@ -673,31 +720,35 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
     }
   }
 
+  const flushBuffer = (force = false) => {
+    const normalized = force ? buffer : buffer.replace(/\r\n/g, '\n')
+    const parts = normalized.split(/\n\n/)
+
+    if (!force && parts.length <= 1) {
+      buffer = normalized
+      return
+    }
+
+    const completeParts = force ? parts : parts.slice(0, -1)
+    for (const part of completeParts) {
+      const lines = part.split(/\n/).map(line => line.trim()).filter(line => line.startsWith('data:'))
+      for (const line of lines) {
+        handlePayload(line.slice(5).trim())
+      }
+    }
+
+    buffer = force ? '' : (parts.at(-1) || '')
+  }
+
   while (true) {
     const { value, done } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
-
-    let boundaryIndex = buffer.indexOf('\n\n')
-    while (boundaryIndex !== -1) {
-      const part = buffer.slice(0, boundaryIndex)
-      buffer = buffer.slice(boundaryIndex + 2)
-
-      const lines = part.split('\n').filter(line => line.startsWith('data:'))
-      for (const line of lines) {
-        handlePayload(line.slice(5).trim())
-      }
-
-      boundaryIndex = buffer.indexOf('\n\n')
-    }
+    flushBuffer(false)
   }
 
-  if (buffer.trim()) {
-    const lines = buffer.split('\n').filter(line => line.startsWith('data:'))
-    for (const line of lines) {
-      handlePayload(line.slice(5).trim())
-    }
-  }
+  buffer += decoder.decode()
+  flushBuffer(true)
 
   streamState.done = true
   await pumpPromise
@@ -728,7 +779,8 @@ async function sendMessage() {
   const assistantMessage = createMessage('assistant', '', {
     pending: true,
     requestModel,
-    requestLocalKeyId
+    requestLocalKeyId,
+    retryCount: 0
   })
   history.value.push(userMessage, assistantMessage)
   const currentDraft = requestDraft
@@ -742,11 +794,33 @@ async function sendMessage() {
     if (systemPrompt.value.trim()) messages.push({ role: 'system', content: systemPrompt.value.trim() })
     messages.push(...getVisibleConversationMessages().filter(item => item.content))
 
-    if (streamMode.value) {
-      await sendStream(rawKey, messages, assistantMessage, requestModel)
-    } else {
-      await sendNonStream(rawKey, messages, assistantMessage, requestModel)
+    let success = false
+    let lastError = null
+    for (let attempt = 0; attempt <= retryCount.value; attempt += 1) {
+      assistantMessage.retryCount = attempt
+      assistantMessage.pending = true
+      assistantMessage.content = ''
+      assistantMessage.usage = null
+      assistantMessage.statusCode = null
+
+      try {
+        if (streamMode.value) {
+          await sendStream(rawKey, messages, assistantMessage, requestModel)
+        } else {
+          await sendNonStream(rawKey, messages, assistantMessage, requestModel)
+        }
+        success = true
+        break
+      } catch (err) {
+        lastError = err
+        if (!shouldRetryRequest(err) || attempt >= retryCount.value) {
+          throw err
+        }
+        await new Promise(resolve => setTimeout(resolve, 800 * (attempt + 1)))
+      }
     }
+
+    if (!success && lastError) throw lastError
 
     if (!assistantMessage.content) {
       assistantMessage.content = '上游返回成功了，但没给出可展示文本。'

@@ -11,7 +11,7 @@ const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { guestOnly: true } },
   { path: '/', redirect: '/dashboard' },
   { path: '/dashboard', name: 'dashboard', component: DashboardView, meta: { requiresAuth: true } },
-  { path: '/chat', name: 'chat', component: ChatView, meta: { requiresAuth: true } },
+  { path: '/chat', name: 'chat', component: ChatView, meta: { requiresAuth: true, keepAlive: true } },
   { path: '/upstreams', name: 'upstreams', component: UpstreamsView, meta: { requiresAuth: true } },
   { path: '/local-keys', name: 'localKeys', component: LocalKeysView, meta: { requiresAuth: true } },
   { path: '/request-logs', name: 'requestLogs', component: RequestLogsView, meta: { requiresAuth: true } }
