@@ -1718,6 +1718,11 @@ select {
   color: var(--text);
 }
 
+.chat-bubble-text-live {
+  contain: content;
+  will-change: contents;
+}
+
 .chat-bubble-text.is-thinking {
   color: #cbd5e1;
   opacity: 0.82;

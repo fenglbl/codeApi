@@ -48,7 +48,13 @@
                 <button v-if="canUseAsDraft(item)" type="button" class="action-link chat-inline-action" @click="useAsDraft(item)">放到输入框</button>
               </div>
               <div
-                v-if="shouldRenderMarkdown(item)"
+                v-if="shouldRenderPendingPlain(item)"
+                :key="`pending-${item.id}-${item.renderTick || 0}`"
+                class="chat-bubble-text chat-bubble-text-live"
+                :class="{ 'is-thinking': item.role === 'assistant' && item.pending && !item.content }"
+              >{{ item.content || (item.role === 'assistant' && item.pending ? '正在生成...' : '...') }}</div>
+              <div
+                v-else-if="shouldRenderMarkdown(item)"
                 class="chat-bubble-text chat-markdown"
                 :class="{ 'is-thinking': item.role === 'assistant' && item.pending && !item.content }"
                 v-html="renderMarkdown(item.content || (item.role === 'assistant' && item.pending ? '正在生成...' : '...'))"
@@ -169,6 +175,17 @@
             </div>
           </div>
         </div>
+
+        <div class="chat-settings-card">
+          <div class="chat-settings-card-head">
+            <div>
+              <div class="chat-settings-card-title">流式调试日志</div>
+              <div class="chat-settings-card-desc">打开后会把 reader.read、拆包、入队、渲染等关键时间点打到浏览器 console。默认只用于排查流式显示问题。</div>
+            </div>
+            <el-switch v-model="streamDebug" active-text="开启" inactive-text="关闭" />
+          </div>
+          <div class="cell-sub">调试时按 F12 看 Console；关闭后不会继续打这些日志。</div>
+        </div>
       </div>
       <template #footer>
         <el-button class="toolbar-ghost-btn" @click="settingsVisible = false">关闭</el-button>
@@ -195,6 +212,7 @@ const router = useRouter()
 const CHAT_STORAGE_KEY = 'codeaip_chat_history_v1'
 const CHAT_SETTINGS_KEY = 'codeaip_chat_settings_v1'
 const CHAT_EXTERNAL_DRAFT_STORAGE_KEY = 'codeaip_chat_external_draft_v1'
+const CHAT_STREAM_DEBUG_STORAGE_KEY = 'codeaip_chat_stream_debug_v1'
 const DEFAULT_SYSTEM_PROMPT = `你是 CodeAip 项目的内置 AI 助理，同时也是一个偏工程落地的高级工程师。
 
 你的职责：
@@ -233,11 +251,13 @@ const sending = ref(false)
 const errorState = ref(null)
 const rawKeyCache = ref({})
 const history = ref([])
+const streamDebug = ref(false)
 const messagesRef = ref(null)
 const chatShellRef = ref(null)
 const activeAbortController = ref(null)
 const stopRequested = ref(false)
 const chatViewportHeight = ref(0)
+const scrollFramePending = ref(false)
 
 const enabledLocalKeys = computed(() => localKeys.value.filter(item => item.enabled))
 const selectedLocalKey = computed(() => enabledLocalKeys.value.find(item => item.id === selectedLocalKeyId.value) || null)
@@ -302,7 +322,7 @@ watch(model, (value) => {
 
 // 这里是聊天页的本地保存入口。
 // 只要聊天记录、系统提示词、流式开关、key/model、重试次数变化，就写回 localStorage。
-watch([history, systemPrompt, streamMode, selectedLocalKeyId, model, retryCount], () => {
+watch([history, systemPrompt, streamMode, selectedLocalKeyId, model, retryCount, streamDebug], () => {
   persistState()
 }, { deep: true })
 
@@ -326,6 +346,13 @@ function safeJsonParse(value, fallback) {
 
 // 持久化时只写本地存储，不直接回写响应式源，
 // 避免出现 watch -> persistState -> 再改源 -> 再触发 watch 的自循环。
+function debugStream(stage, payload = {}) {
+  if (!streamDebug.value || typeof console === 'undefined') return
+  const now = new Date()
+  const stamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}.${String(now.getMilliseconds()).padStart(3, '0')}`
+  console.log(`[CodeAip stream][${stamp}] ${stage}`, payload)
+}
+
 function persistState() {
   const nextModelByLocalKey = selectedLocalKeyId.value
     ? {
@@ -341,7 +368,8 @@ function persistState() {
     modelByLocalKey: nextModelByLocalKey,
     systemPrompt: systemPrompt.value,
     streamMode: streamMode.value,
-    retryCount: retryCount.value
+    retryCount: retryCount.value,
+    streamDebug: streamDebug.value
   }))
 }
 
@@ -360,6 +388,7 @@ function restoreState() {
   systemPrompt.value = savedSettings.systemPrompt || DEFAULT_SYSTEM_PROMPT
   streamMode.value = savedSettings.streamMode !== undefined ? !!savedSettings.streamMode : true
   retryCount.value = Number.isFinite(Number(savedSettings.retryCount)) ? Math.max(0, Math.min(5, Number(savedSettings.retryCount))) : 3
+  streamDebug.value = savedSettings.streamDebug !== undefined ? !!savedSettings.streamDebug : false
 }
 
 function createMessage(role, content, extra = {}) {
@@ -487,6 +516,10 @@ function renderMarkdown(content = '') {
   return blocks.filter((block, index, arr) => block !== '' || (index > 0 && arr[index - 1] !== '')).join('')
 }
 
+function shouldRenderPendingPlain(item) {
+  return item?.role === 'assistant' && item?.pending
+}
+
 function shouldRenderMarkdown(item) {
   return item?.role === 'assistant' && Boolean(item?.content) && !item?.pending
 }
@@ -533,6 +566,18 @@ function showBubbleToolbar(item) {
 // 不只是等 Vue nextTick，还要等真正 paint 之后再做滚动之类的操作。
 async function waitForPaint() {
   await new Promise(resolve => requestAnimationFrame(() => resolve()))
+}
+
+// 轻量滚动调度：把多次滚动请求合并到同一帧，
+// 避免流式过程中“每来一点字就强制滚一次”带来的重排/重绘压力。
+function scheduleScrollToBottom() {
+  if (scrollFramePending.value) return
+  scrollFramePending.value = true
+  requestAnimationFrame(() => {
+    scrollFramePending.value = false
+    const el = messagesRef.value
+    if (el) el.scrollTop = el.scrollHeight
+  })
 }
 
 // 把消息列表滚到最底部。聊天页里很多地方会重复调用它，
@@ -715,68 +760,82 @@ async function sendNonStream(rawKey, messages, assistantMessage, requestModel) {
   assistantMessage.usage = extractUsage(data)
 }
 
-// 这是“显示层节奏控制”，不是 SSE 网络层节奏。
-// 就算上游 chunk 已经到了，这里也会按内容再做一点点人为延时，
-// 所以它本身就是影响“看起来是不是整段出来”的可疑点之一。
-function getStreamChunkDelay(chunk) {
-  if (!chunk || /^\s+$/.test(chunk)) return 0
-  if (/[，。！？；：,.!?;:]$/.test(chunk)) return 42
-  if (/[）】》」』)\]}>]$/.test(chunk)) return 24
-  if (chunk.length >= 6) return 16
-  return 11
+// 这里直接做“前端假打字机层”：
+// - 上游来多快都不直接决定可见速度
+// - UI 永远按固定节奏一字一字往外吐
+// 目的不是追求真实 token 节奏，而是先保证人眼明确看出它在打字。
+function getStreamChunkDelay(piece = '') {
+  if (!piece) return 48
+  if (piece === '\n') return 120
+  if (/[。！？!?；;]/.test(piece)) return 150
+  if (/[，,：:]/.test(piece)) return 110
+  return 52
 }
 
-// 把单次拿到的 delta 再拆成更小片段，交给前端逐段渲染。
-// 注意：这里拆得越碎，DOM 更新越频繁；如果布局/滚动也很频繁，就更容易卡成“看起来后面才一起出来”。
+// 上游 delta 统一先拆成单字，再交给前端打字机层慢慢吐。
 function splitForDisplay(text = '') {
-  const result = []
-  let buffer = ''
-
-  for (const char of text) {
-    buffer += char
-    if (/\s/.test(char) || /[，。！？；：,.!?;:]/.test(char) || buffer.length >= 2) {
-      result.push(buffer)
-      buffer = ''
-    }
-  }
-
-  if (buffer) result.push(buffer)
-  return result
+  const normalized = String(text || '')
+  if (!normalized) return []
+  return Array.from(normalized)
 }
 
-// 真正把 queue 里的流式文本一点点刷到 UI 的地方。
-// 读取网络流和渲染 UI 是分开的：
-// - sendStream 负责 reader.read() + buffer 拆包 + queue.push()
-// - pumpStreamQueue 负责 assistantMessage.content += chunk
-// 如果问题表现为“数据到了但页面没及时显示”，这里就是重点嫌疑区之一。
+function takeVisibleBatch(queue) {
+  if (!queue.length) return ''
+  return queue.shift() || ''
+}
+
+// 真正把 queue 里的流式文本刷到 UI 的地方。
+// 这里已经不再追求“贴近真实到达速度”，而是强制走可见打字机：
+// 每次只吐一个字符，并按字符类型决定停顿时长。
 async function pumpStreamQueue(assistantMessage, queue, state) {
+  debugStream('pump:start', { queueLength: queue.length })
   if (state.running) return
   state.running = true
+  state.lastFlushAt = 0
 
   while (!stopRequested.value && (queue.length || !state.done)) {
-    const chunk = queue.shift()
-    if (!chunk) {
+    if (!queue.length) {
       await new Promise(resolve => setTimeout(resolve, 8))
       continue
     }
 
-    assistantMessage.content += chunk
+    const batch = takeVisibleBatch(queue)
+    if (!batch) continue
+
+    const now = Date.now()
+    const delay = getStreamChunkDelay(batch)
+    const elapsed = state.lastFlushAt ? now - state.lastFlushAt : delay
+    if (elapsed < delay) {
+      await new Promise(resolve => setTimeout(resolve, delay - elapsed))
+    }
+
+    debugStream('pump:dequeue', {
+      batchPreview: batch.slice(0, 160),
+      batchLength: batch.length,
+      queueLengthAfterShift: queue.length,
+      renderedLengthBefore: assistantMessage.content.length
+    })
+
+    assistantMessage.content += batch
+    assistantMessage.renderTick = (assistantMessage.renderTick || 0) + 1
     state.renderCount = (state.renderCount || 0) + 1
+    state.lastFlushAt = Date.now()
+
+    debugStream('pump:rendered', {
+      renderCount: state.renderCount,
+      renderedLengthAfter: assistantMessage.content.length,
+      renderTick: assistantMessage.renderTick
+    })
 
     await nextTick()
-    await waitForPaint()
-
-    if (state.renderCount % 3 === 0 || /[，。！？；：,.!?;:]$/.test(chunk) || queue.length === 0) {
-      await scrollToBottom()
-    }
-
-    const delay = getStreamChunkDelay(chunk)
-    if (delay > 0) {
-      await new Promise(resolve => setTimeout(resolve, delay))
-    }
+    scheduleScrollToBottom()
   }
 
   await scrollToBottom()
+  debugStream('pump:done', {
+    renderCount: state.renderCount,
+    finalLength: assistantMessage.content.length
+  })
   state.running = false
 }
 
@@ -819,13 +878,21 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
   // 处理单条 SSE data: 后面的 JSON 负载。
   // 这里只负责“解析 -> 把 delta 放进 queue”，不直接碰 DOM。
   const handlePayload = (payload) => {
+    debugStream('sse:payload', { payloadPreview: String(payload || '').slice(0, 160) })
     if (!payload || payload === '[DONE]') return
 
     try {
       const json = JSON.parse(payload)
       const delta = json?.choices?.[0]?.delta?.content || json?.choices?.[0]?.text || ''
       if (delta) {
-        queue.push(...splitForDisplay(delta))
+        const pieces = splitForDisplay(delta)
+        queue.push(...pieces)
+        debugStream('sse:enqueue', {
+          deltaPreview: delta.slice(0, 160),
+          deltaLength: delta.length,
+          pieces: pieces.length,
+          queueLengthAfterPush: queue.length
+        })
       }
       if (json?.usage) {
         finalUsage = extractUsage(json)
@@ -840,6 +907,11 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
   // 如果上游/代理层交付节奏和这里预期不一致，就可能出现：
   // 数据其实到了，但得等到攒够分隔符才会进入 handlePayload。
   const flushBuffer = (force = false) => {
+    debugStream('buffer:flush:before', {
+      force,
+      bufferLength: buffer.length,
+      bufferPreview: buffer.slice(0, 160)
+    })
     const normalized = force ? buffer : buffer.replace(/\r\n/g, '\n')
     const parts = normalized.split(/\n\n/)
 
@@ -849,6 +921,11 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
     }
 
     const completeParts = force ? parts : parts.slice(0, -1)
+    debugStream('buffer:flush:parts', {
+      force,
+      totalParts: parts.length,
+      completeParts: completeParts.length
+    })
     for (const part of completeParts) {
       const lines = part.split(/\n/).map(line => line.trim()).filter(line => line.startsWith('data:'))
       for (const line of lines) {
@@ -863,8 +940,16 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
   // 如果想判断“是不是后端压根没流”，这里最适合加时间戳日志。
   while (true) {
     const { value, done } = await reader.read()
+    debugStream('reader:read', {
+      done,
+      chunkBytes: value?.byteLength || 0
+    })
     if (done) break
     buffer += decoder.decode(value, { stream: true })
+    debugStream('reader:decoded', {
+      bufferLength: buffer.length,
+      bufferPreview: buffer.slice(0, 160)
+    })
     flushBuffer(false)
   }
 
@@ -905,9 +990,15 @@ async function sendMessage() {
     pending: true,
     requestModel,
     requestLocalKeyId,
-    retryCount: 0
+    retryCount: 0,
+    renderTick: 0
   })
   history.value.push(userMessage, assistantMessage)
+
+  // 这里后续统一只操作 history 里的响应式 assistant 引用，
+  // 避免继续拿 push 前的普通对象引用改字段，导致 Vue3 视图跟踪不稳定。
+  const liveAssistantMessage = history.value[history.value.length - 1]
+
   const currentDraft = requestDraft
   draft.value = ''
   await nextTick()
@@ -923,17 +1014,23 @@ async function sendMessage() {
     let lastError = null
     // 自动重试发生在这里：一次发送请求里，最多走 retryCount + 1 轮尝试。
     for (let attempt = 0; attempt <= retryCount.value; attempt += 1) {
-      assistantMessage.retryCount = attempt
-      assistantMessage.pending = true
-      assistantMessage.content = ''
-      assistantMessage.usage = null
-      assistantMessage.statusCode = null
+      debugStream('request:attempt', {
+        attempt,
+        mode: streamMode.value ? 'stream' : 'non-stream',
+        requestModel
+      })
+      liveAssistantMessage.retryCount = attempt
+      liveAssistantMessage.pending = true
+      liveAssistantMessage.content = ''
+      liveAssistantMessage.usage = null
+      liveAssistantMessage.statusCode = null
+      liveAssistantMessage.renderTick = 0
 
       try {
         if (streamMode.value) {
-          await sendStream(rawKey, messages, assistantMessage, requestModel)
+          await sendStream(rawKey, messages, liveAssistantMessage, requestModel)
         } else {
-          await sendNonStream(rawKey, messages, assistantMessage, requestModel)
+          await sendNonStream(rawKey, messages, liveAssistantMessage, requestModel)
         }
         success = true
         break
@@ -948,8 +1045,8 @@ async function sendMessage() {
 
     if (!success && lastError) throw lastError
 
-    if (!assistantMessage.content) {
-      assistantMessage.content = '上游返回成功了，但没给出可展示文本。'
+    if (!liveAssistantMessage.content) {
+      liveAssistantMessage.content = '上游返回成功了，但没给出可展示文本。'
       errorState.value = {
         kind: 'warning',
         chipClass: 'is-warning',
@@ -961,7 +1058,7 @@ async function sendMessage() {
       }
     }
 
-    assistantMessage.pending = false
+    liveAssistantMessage.pending = false
     await nextTick()
     persistState()
     await scrollToBottom()
@@ -969,7 +1066,7 @@ async function sendMessage() {
       scrollToBottom()
     })
   } catch (err) {
-    history.value = history.value.filter(item => item.id !== assistantMessage.id)
+    history.value = history.value.filter(item => item.id !== liveAssistantMessage.id)
     draft.value = currentDraft
     errorState.value = buildErrorState(err, currentDraft)
     if (err?.name === 'AbortError' || stopRequested.value) {
