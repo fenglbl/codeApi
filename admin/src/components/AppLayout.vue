@@ -2,7 +2,7 @@
   <div class="page-shell">
     <aside class="sidebar">
       <div class="sidebar-logo">CodeAip<div class="sidebar-sub">Local OpenAI Gateway</div></div>
-      <el-menu router :default-active="$route.path" background-color="transparent" text-color="#cbd5e1" active-text-color="#60a5fa">
+      <el-menu router :default-active="$route.path" background-color="transparent">
         <el-menu-item index="/dashboard">概览</el-menu-item>
         <el-menu-item index="/chat">聊天</el-menu-item>
         <el-menu-item index="/upstreams">上游管理</el-menu-item>
@@ -17,8 +17,14 @@
           <div class="muted">{{ subtitle }}</div>
         </div>
         <div class="topbar-actions">
-          <span class="muted">{{ auth.admin?.username || 'admin' }}</span>
-          <el-button type="danger" plain @click="logout">退出</el-button>
+          <el-select v-model="themePreference" class="theme-switcher" size="small" @change="setThemePreference">
+            <el-option label="跟随系统" value="system" />
+            <el-option label="浅色模式" value="light" />
+            <el-option label="深色模式" value="dark" />
+          </el-select>
+          <span class="mini-tag">{{ themeLabel }}</span>
+          <span class="mini-tag">{{ auth.admin?.username || 'admin' }}</span>
+          <el-button type="danger" plain class="toolbar-danger-btn" @click="logout">退出</el-button>
         </div>
       </div>
       <slot />
@@ -29,6 +35,7 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useTheme } from '../composables/useTheme'
 
 defineProps({
   title: { type: String, required: true },
@@ -37,6 +44,7 @@ defineProps({
 
 const router = useRouter()
 const auth = useAuthStore()
+const { themePreference, themeLabel, setThemePreference } = useTheme()
 
 function logout() {
   auth.logout()

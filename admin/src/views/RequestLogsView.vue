@@ -19,8 +19,39 @@
       </div>
     </div>
 
+    <div class="log-overview-grid">
+      <div class="overview-card">
+        <div class="overview-label">当前结果</div>
+        <div class="overview-value">{{ formatNumber(total) }}</div>
+        <div class="overview-sub">按当前筛选条件统计的日志总数</div>
+      </div>
+      <div class="overview-card">
+        <div class="overview-label">当前页条目</div>
+        <div class="overview-value">{{ formatNumber(rows.length) }}</div>
+        <div class="overview-sub">本页已加载的日志条数</div>
+      </div>
+      <div class="overview-card">
+        <div class="overview-label">失败占比</div>
+        <div class="overview-value">{{ errorRatio }}</div>
+        <div class="overview-sub">当前页里状态码 ≥ 400 的请求比例</div>
+      </div>
+      <div class="overview-card">
+        <div class="overview-label">流式请求</div>
+        <div class="overview-value">{{ formatNumber(streamCount) }}</div>
+        <div class="overview-sub">当前页中走流式返回的请求条数</div>
+      </div>
+    </div>
+
     <div class="panel">
       <div class="panel-body">
+        <div class="log-filters-panel">
+          <div class="page-section-head page-section-head-tight">
+            <div>
+              <div class="section-title section-title-sm">条件筛选</div>
+              <div class="section-desc">先按路径、状态码、本地 Key、上游缩小范围，再往下看错误和耗时。</div>
+            </div>
+          </div>
+
         <div class="log-filters">
           <el-input v-model="filters.path" placeholder="按路径筛选，如 /v1/chat/completions" clearable />
           <el-select v-model="filters.statusCode" placeholder="状态码" clearable>
@@ -43,8 +74,9 @@
             <el-button class="toolbar-ghost-btn" @click="resetFilters">重置</el-button>
           </div>
         </div>
+        </div>
 
-        <div class="table-toolbar">
+        <div class="table-toolbar log-view-toolbar">
           <div class="muted">支持按页查看请求日志。已支持 token、缓存、字数统计和流式标记。</div>
           <div class="table-toolbar-actions">
             <el-switch v-model="compactMode" inline-prompt active-text="紧凑" inactive-text="舒展" />
@@ -190,7 +222,7 @@ const quickMode = ref('all')
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(50)
-const tableMaxHeight = 'calc(100vh - 360px)'
+const tableMaxHeight = 'calc(100vh - 312px)'
 const filters = reactive({
   path: '',
   statusCode: '',
@@ -207,6 +239,13 @@ const displayRows = computed(() => {
 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil((total.value || 0) / pageSize.value)))
+const currentPageErrorCount = computed(() => rows.value.filter(item => Number(item?.statusCode || 0) >= 400).length)
+const streamCount = computed(() => rows.value.filter(item => item?.isStream).length)
+const errorRatio = computed(() => {
+  const totalRows = rows.value.length
+  if (!totalRows) return '0%'
+  return `${Math.round((currentPageErrorCount.value / totalRows) * 100)}%`
+})
 
 function safeJsonParse(value, fallback) {
   try {

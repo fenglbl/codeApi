@@ -7,7 +7,7 @@
             <div class="section-title">本地 Keys</div>
             <div class="section-desc">共 {{ rows.length }} 个 Key，启用 {{ enabledCount }} 个。明文只在需要时展示，别到处乱贴。</div>
           </div>
-          <el-button type="primary" @click="openCreate">新增 Key</el-button>
+          <el-button type="primary" class="toolbar-primary-btn" @click="openCreate">新增 Key</el-button>
         </div>
 
         <div v-if="rows.length" class="table-scroll-shell admin-table-shell compact-list-shell">
@@ -92,7 +92,7 @@
       </div>
     </div>
 
-    <el-dialog v-model="visible" :title="editingId ? '编辑本地 Key' : '新增本地 Key'" width="860px">
+    <el-dialog v-model="visible" :title="editingId ? '编辑本地 Key' : '新增本地 Key'" width="860px" class="local-key-dialog">
       <el-form :model="form" label-position="top">
         <div class="form-block">
           <div class="form-block-title">基础信息</div>
@@ -108,7 +108,7 @@
           <div class="form-block-desc">先绑定可用上游，再从已绑定的上游里挑一个默认上游。默认上游就是没写特殊规则时的兜底出口。</div>
 
           <el-form-item label="绑定上游">
-            <el-select v-model="form.upstreamBindings" multiple filterable class="full-width-control" placeholder="选择这个 Key 可用的上游">
+            <el-select v-model="form.upstreamBindings" multiple filterable class="full-width-control upstream-binding-select" placeholder="选择这个 Key 可用的上游">
               <el-option v-for="item in upstreams" :key="item.id" :label="item.name" :value="item.id" />
             </el-select>
             <div class="field-hint">当前已绑定 {{ boundUpstreams.length }} 个上游。至少绑一个，默认上游才有意义。</div>
@@ -146,9 +146,9 @@
               <div class="form-block-title">模型映射</div>
               <div class="form-block-desc">左边写本地模型名，右边写真正发给上游的模型名。下面会按当前默认上游和已绑定上游给你建议。</div>
             </div>
-            <div class="mapping-meta">
+            <div class="mapping-meta dialog-action-row">
               <span class="metric-badge">{{ mappingCount }} 条</span>
-              <el-button size="small" @click="addMapping">新增映射</el-button>
+              <el-button size="small" class="toolbar-ghost-btn" @click="addMapping">新增映射</el-button>
             </div>
           </div>
 
@@ -204,8 +204,10 @@
         </div>
       </el-form>
       <template #footer>
-        <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+        <div class="dialog-footer-actions">
+          <el-button class="toolbar-ghost-btn" @click="visible = false">取消</el-button>
+          <el-button type="primary" class="toolbar-primary-btn" :loading="saving" @click="save">保存</el-button>
+        </div>
       </template>
     </el-dialog>
 
@@ -249,9 +251,9 @@
           <div class="key-delivery-notice-desc">复制后，马上放进密码管理器、部署面板或 `.env`，别只靠脑子记。</div>
         </div>
 
-        <div class="raw-key-actions">
-          <el-button type="primary" @click="copyLatestRawKey">复制并关闭</el-button>
-          <el-button @click="rawKeyVisible = false">稍后处理</el-button>
+        <div class="raw-key-actions dialog-footer-actions">
+          <el-button type="primary" class="toolbar-primary-btn" @click="copyLatestRawKey">复制并关闭</el-button>
+          <el-button class="toolbar-ghost-btn" @click="rawKeyVisible = false">稍后处理</el-button>
         </div>
       </div>
     </el-dialog>

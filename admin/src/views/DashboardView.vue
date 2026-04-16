@@ -216,6 +216,19 @@ function formatCompactNumber(value) {
   return String(num)
 }
 
+function getChartTheme() {
+  const rootStyle = getComputedStyle(document.documentElement)
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light'
+  return {
+    textColor: rootStyle.getPropertyValue('--muted').trim() || (isLight ? '#64748b' : '#94a3b8'),
+    borderColor: isLight ? 'rgba(148, 163, 184, 0.18)' : 'rgba(148, 163, 184, 0.18)',
+    splitLineColor: isLight ? 'rgba(148, 163, 184, 0.12)' : 'rgba(148, 163, 184, 0.10)',
+    tooltipBg: isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(15, 23, 42, 0.96)',
+    tooltipBorder: isLight ? 'rgba(148, 163, 184, 0.24)' : 'rgba(148, 163, 184, 0.18)',
+    tooltipText: rootStyle.getPropertyValue('--text').trim() || (isLight ? '#0f172a' : '#e5e7eb')
+  }
+}
+
 const timeBuckets = computed(() => {
   const { days, unit } = getRangeConfig()
   const now = new Date()
@@ -308,19 +321,21 @@ function buildRequestChart() {
   if (!requestChartRef.value) return
   if (!requestChart) requestChart = echarts.init(requestChartRef.value)
 
+  const theme = getChartTheme()
+
   requestChart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(15, 23, 42, 0.96)',
-      borderColor: 'rgba(148, 163, 184, 0.18)',
-      textStyle: { color: '#e5e7eb' },
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.tooltipBorder,
+      textStyle: { color: theme.tooltipText },
       valueFormatter: value => `${Number(value) || 0}`
     },
     legend: {
       top: 0,
       right: 0,
-      textStyle: { color: '#94a3b8' },
+      textStyle: { color: theme.textColor },
       itemWidth: 12,
       itemHeight: 8
     },
@@ -329,14 +344,14 @@ function buildRequestChart() {
       type: 'category',
       data: aggregatedBuckets.value.map(item => item.label),
       boundaryGap: false,
-      axisLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } },
-      axisLabel: { color: '#94a3b8', hideOverlap: true }
+      axisLine: { lineStyle: { color: theme.borderColor } },
+      axisLabel: { color: theme.textColor, hideOverlap: true }
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.10)' } },
+      splitLine: { lineStyle: { color: theme.splitLineColor } },
       axisLabel: {
-        color: '#94a3b8',
+        color: theme.textColor,
         formatter: value => formatCompactNumber(value)
       }
     },
@@ -380,20 +395,22 @@ function buildTokenChart() {
   if (!tokenChartRef.value) return
   if (!tokenChart) tokenChart = echarts.init(tokenChartRef.value)
 
+  const theme = getChartTheme()
+
   tokenChart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
-      backgroundColor: 'rgba(15, 23, 42, 0.96)',
-      borderColor: 'rgba(148, 163, 184, 0.18)',
-      textStyle: { color: '#e5e7eb' },
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.tooltipBorder,
+      textStyle: { color: theme.tooltipText },
       valueFormatter: value => `${Number(value) || 0}`
     },
     legend: {
       top: 0,
       right: 0,
-      textStyle: { color: '#94a3b8' },
+      textStyle: { color: theme.textColor },
       itemWidth: 12,
       itemHeight: 8
     },
@@ -401,14 +418,14 @@ function buildTokenChart() {
     xAxis: {
       type: 'category',
       data: aggregatedBuckets.value.map(item => item.label),
-      axisLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } },
-      axisLabel: { color: '#94a3b8', hideOverlap: true }
+      axisLine: { lineStyle: { color: theme.borderColor } },
+      axisLabel: { color: theme.textColor, hideOverlap: true }
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.10)' } },
+      splitLine: { lineStyle: { color: theme.splitLineColor } },
       axisLabel: {
-        color: '#94a3b8',
+        color: theme.textColor,
         formatter: value => formatCompactNumber(value)
       }
     },

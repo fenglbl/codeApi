@@ -7,7 +7,7 @@
             <div class="section-title">上游列表</div>
             <div class="section-desc">共 {{ rows.length }} 个上游，启用 {{ enabledCount }} 个，已有模型列表 {{ syncedProviderCount }} 个。Base URL 支持填根域名或 /v1。</div>
           </div>
-          <el-button type="primary" @click="openCreate">新增上游</el-button>
+          <el-button type="primary" class="toolbar-primary-btn" @click="openCreate">新增上游</el-button>
         </div>
 
         <div v-if="rows.length" class="table-scroll-shell admin-table-shell compact-list-shell">
@@ -76,7 +76,7 @@
       </div>
     </div>
 
-    <el-dialog v-model="visible" :title="editingId ? '编辑上游' : '新增上游'" width="820px">
+    <el-dialog v-model="visible" :title="editingId ? '编辑上游' : '新增上游'" width="820px" class="upstream-dialog">
       <el-form :model="form" label-position="top">
         <div class="form-block">
           <div class="form-block-title">基础信息</div>
@@ -92,9 +92,9 @@
         <div class="form-block">
           <div class="form-block-title">探活与模型同步</div>
           <div class="form-block-desc">保存后可以直接测试连通性，或从上游拉一把模型列表回来，省得手填。</div>
-          <div class="upstream-test-actions">
-            <el-button :disabled="!canRunRemoteAction || remoteLoading" :loading="testLoading" @click="runTest">连接测试</el-button>
-            <el-button type="primary" plain :disabled="!canRunRemoteAction || remoteLoading" :loading="modelsLoading" @click="syncModels">获取模型列表</el-button>
+          <div class="upstream-test-actions dialog-action-row">
+            <el-button class="toolbar-ghost-btn" :disabled="!canRunRemoteAction || remoteLoading" :loading="testLoading" @click="runTest">连接测试</el-button>
+            <el-button type="primary" plain class="toolbar-primary-btn dialog-primary-soft-btn" :disabled="!canRunRemoteAction || remoteLoading" :loading="modelsLoading" @click="syncModels">获取模型列表</el-button>
             <span v-if="editingId" class="mini-tag is-more">已保存后可直接探活 / 同步</span>
           </div>
           <div class="field-hint" v-if="!editingId">先保存这个上游，才能测试和获取模型列表。</div>
@@ -129,9 +129,9 @@
           </div>
 
           <div class="model-editor-shell">
-            <div class="model-editor-input-row">
+            <div class="model-editor-input-row dialog-action-row">
               <el-input v-model="newModelName" placeholder="输入一个模型名后点添加，例如：gpt-4o-mini" @keyup.enter="addModel" />
-              <el-button @click="addModel">添加</el-button>
+              <el-button class="toolbar-ghost-btn" @click="addModel">添加</el-button>
             </div>
 
             <div v-if="modelRows.length" class="model-editor-tags">
@@ -153,8 +153,10 @@
         </div>
       </el-form>
       <template #footer>
-        <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+        <div class="dialog-footer-actions">
+          <el-button class="toolbar-ghost-btn" @click="visible = false">取消</el-button>
+          <el-button type="primary" class="toolbar-primary-btn" :loading="saving" @click="save">保存</el-button>
+        </div>
       </template>
     </el-dialog>
   </AppLayout>

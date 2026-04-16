@@ -5,12 +5,13 @@
         <div class="auth-side-eyebrow">CodeAip</div>
         <div class="auth-side-title">本地 OpenAI 网关的控制台</div>
         <div class="auth-side-desc">
-          管理上游、分发本地 Key、维护模型映射、查看请求日志。少折腾环境，多看结果。
+          管理上游、分发本地 Key、维护模型映射、查看请求日志。少折腾环境，多看结果，排查也别瞎猜。
         </div>
         <div class="auth-side-points">
           <div class="auth-side-point"><span class="auth-side-dot"></span> 多上游统一接入</div>
           <div class="auth-side-point"><span class="auth-side-dot"></span> 本地 Key 绑定默认路由</div>
           <div class="auth-side-point"><span class="auth-side-dot"></span> 请求日志排查更直接</div>
+          <div class="auth-side-point"><span class="auth-side-dot"></span> 聊天调试和日志联动</div>
         </div>
       </div>
 
@@ -20,7 +21,7 @@
 
         <div class="auth-mini-info">
           <span class="mini-tag">JWT 后台鉴权</span>
-          <span class="mini-tag">暗色控制台</span>
+          <span class="mini-tag">亮暗双主题</span>
           <span class="mini-tag">本地网关管理</span>
         </div>
 
