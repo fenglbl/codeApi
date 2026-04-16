@@ -1,0 +1,809 @@
+<template>
+  <AppLayout title="聊天" subtitle="像正常聊天页一样直接对话，也能顺手验证本地 Key、模型映射和上游响应。">
+    <div ref="chatShellRef" class="chat-shell panel" :style="chatShellVars">
+      <div class="chat-toolbar">
+        <div class="chat-toolbar-left">
+          <el-select v-model="selectedLocalKeyId" placeholder="选择本地 Key" filterable class="chat-toolbar-select">
+            <el-option
+              v-for="item in enabledLocalKeys"
+              :key="item.id"
+              :label="`${item.name} (${item.keyPrefix || '未命名'})`"
+              :value="item.id"
+            />
+          </el-select>
+          <el-select v-model="model" placeholder="选择模型" filterable allow-create default-first-option class="chat-toolbar-model-select">
+            <el-option
+              v-for="item in suggestedModels"
+              :key="item"
+              :label="item"
+              :value="item"
+            />
+          </el-select>
+        </div>
+        <div class="chat-toolbar-right">
+          <span class="state-chip">{{ streamMode ? '流式输出' : '非流输出' }}</span>
+          <span v-if="sending" class="state-chip is-warning">生成中</span>
+          <el-button v-if="sending" type="danger" plain @click="stopGeneration">停止生成</el-button>
+          <el-button @click="clearHistory" :disabled="sending">清空历史</el-button>
+          <el-button class="chat-settings-btn" @click="settingsVisible = true">设置</el-button>
+        </div>
+      </div>
+
+      <div ref="messagesRef" class="chat-messages" @click="handleMessageAreaClick">
+        <template v-if="history.length">
+          <div
+            v-for="item in history"
+            :key="item.id"
+            class="chat-bubble-row"
+            :class="item.role === 'user' ? 'is-user' : item.role === 'assistant' ? 'is-assistant' : 'is-system'"
+          >
+            <div class="chat-bubble-meta">
+              <span class="chat-role">{{ getRoleLabel(item.role) }}</span>
+              <span class="chat-time">{{ formatTime(item.createdAt) }}</span>
+            </div>
+            <div class="chat-bubble" :class="`is-${item.role}`">
+              <div v-if="showBubbleToolbar(item)" class="chat-bubble-toolbar">
+                <button v-if="item.content" type="button" class="action-link chat-inline-action" @click="copyMessage(item.content)">复制</button>
+                <button v-if="item.role === 'user'" type="button" class="action-link chat-inline-action" @click="retryFromUserMessage(item)">重新发送</button>
+                <button v-if="canUseAsDraft(item)" type="button" class="action-link chat-inline-action" @click="useAsDraft(item)">放到输入框</button>
+              </div>
+              <div
+                v-if="shouldRenderMarkdown(item)"
+                class="chat-bubble-text chat-markdown"
+                :class="{ 'is-thinking': item.role === 'assistant' && item.pending && !item.content }"
+                v-html="renderMarkdown(item.content || (item.role === 'assistant' && item.pending ? '正在生成...' : '...'))"
+              ></div>
+              <div
+                v-else
+                class="chat-bubble-text"
+                :class="{ 'is-thinking': item.role === 'assistant' && item.pending && !item.content }"
+              >{{ item.content || (item.role === 'assistant' && item.pending ? '正在生成...' : '...') }}</div>
+              <div v-if="item.statusCode || item.usage || item.role === 'assistant'" class="chat-bubble-foot">
+                <span v-if="item.pending" class="mini-tag">生成中</span>
+                <span v-if="item.statusCode" class="mini-tag">状态 {{ item.statusCode }}</span>
+                <span v-if="item.usage?.promptTokens" class="mini-tag">输入 {{ item.usage.promptTokens }}</span>
+                <span v-if="item.usage?.completionTokens" class="mini-tag">输出 {{ item.usage.completionTokens }}</span>
+                <span v-if="item.usage?.totalTokens" class="mini-tag">总计 {{ item.usage.totalTokens }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+        <div v-else class="chat-empty">
+          <div class="chat-empty-badge">CodeAip Chat</div>
+          <div class="chat-empty-title">还没有聊天记录</div>
+          <div class="chat-empty-desc">选个 Key 和模型，直接开聊。这里现在就是聊天页，不再给你塞那些演示玩具按钮。</div>
+        </div>
+      </div>
+
+      <div v-if="errorState" class="chat-error-bar" :class="`is-${errorState.kind}`">
+        <div class="chat-error-head">
+          <div class="chat-error-summary">
+            <span class="state-chip" :class="errorState.chipClass">{{ errorState.badge }}</span>
+            <div>
+              <div class="chat-error-title">{{ errorState.title }}</div>
+              <div class="chat-error-desc">{{ errorState.desc }}</div>
+            </div>
+          </div>
+          <div class="chat-error-actions">
+            <button v-if="errorState.detail" class="action-link chat-inline-action" type="button" @click="copyMessage(errorState.detail)">复制详情</button>
+            <button v-if="errorState.suggestPrompt" class="action-link chat-inline-action" type="button" @click="applyStarter(errorState.suggestPrompt)">放到输入框</button>
+          </div>
+        </div>
+        <details v-if="errorState.detail" class="chat-error-detail">
+          <summary>查看原始错误</summary>
+          <div class="chat-error-text">{{ errorState.detail }}</div>
+        </details>
+      </div>
+
+      <div class="chat-composer">
+        <el-input
+          v-model="draft"
+          type="textarea"
+          :autosize="{ minRows: 4, maxRows: 10 }"
+          resize="none"
+          class="chat-composer-input"
+          placeholder="输入消息，Enter 发送，Shift + Enter 换行。"
+          @keydown="handleComposerKeydown"
+        />
+        <div class="chat-composer-actions">
+          <div class="chat-composer-left muted">
+            <span>系统提示词在左上角设置里；历史会保存在当前浏览器。</span>
+            <span class="chat-composer-count">{{ draft.length }} 字</span>
+          </div>
+          <div class="chat-composer-right">
+            <el-button v-if="sending" type="danger" plain @click="stopGeneration">停止</el-button>
+            <el-button type="primary" :loading="sending" @click="sendMessage">发送</el-button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <el-dialog v-model="settingsVisible" title="聊天设置" width="640px">
+      <el-form label-position="top">
+        <el-form-item label="系统提示词">
+          <el-input
+            v-model="systemPrompt"
+            type="textarea"
+            :rows="8"
+            placeholder="比如：你是一个直接、简洁、靠谱的助手。"
+          />
+          <div class="cell-sub">保存后会参与后续对话，但不会自动插到可见聊天历史里。</div>
+        </el-form-item>
+
+        <el-form-item label="输出模式">
+          <el-switch v-model="streamMode" active-text="流式输出" inactive-text="非流输出" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="settingsVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+  </AppLayout>
+</template>
+
+<script setup>
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import AppLayout from '../components/AppLayout.vue'
+import { adminApi } from '../services/adminApi'
+
+const CHAT_STORAGE_KEY = 'codeaip_chat_history_v1'
+const CHAT_SETTINGS_KEY = 'codeaip_chat_settings_v1'
+
+const localKeys = ref([])
+const selectedLocalKeyId = ref('')
+const model = ref('')
+const systemPrompt = ref('')
+const draft = ref('')
+const streamMode = ref(true)
+const settingsVisible = ref(false)
+const sending = ref(false)
+const errorState = ref(null)
+const rawKeyCache = ref({})
+const history = ref([])
+const messagesRef = ref(null)
+const chatShellRef = ref(null)
+const activeAbortController = ref(null)
+const stopRequested = ref(false)
+const chatViewportHeight = ref(0)
+
+const enabledLocalKeys = computed(() => localKeys.value.filter(item => item.enabled))
+const selectedLocalKey = computed(() => enabledLocalKeys.value.find(item => item.id === selectedLocalKeyId.value) || null)
+
+const lastUserMessage = computed(() => {
+  const rows = [...history.value].reverse()
+  return rows.find(item => item.role === 'user' && item.content) || null
+})
+
+const suggestedModels = computed(() => {
+  const key = selectedLocalKey.value
+  if (!key) return []
+
+  const mappedLocalModels = (key.modelMappings || []).map(item => item.localModel).filter(Boolean)
+  const mappedUpstreamModels = (key.modelMappings || []).map(item => item.upstreamModel).filter(Boolean)
+  const upstreamModels = [
+    ...(key.defaultUpstreamId?.models || []),
+    ...((key.upstreamBindings || []).flatMap(item => item?.models || []))
+  ].filter(Boolean)
+
+  return [...new Set([...mappedLocalModels, ...mappedUpstreamModels, ...upstreamModels])].slice(0, 16)
+})
+
+const chatShellVars = computed(() => {
+  const safeHeight = chatViewportHeight.value || 0
+  if (!safeHeight) return {}
+  return {
+    '--chat-panel-height': `${safeHeight}px`,
+    '--chat-messages-height': `${Math.max(260, safeHeight - 250)}px`
+  }
+})
+
+watch(selectedLocalKeyId, async (newId, oldId) => {
+  await nextTick()
+  const value = selectedLocalKey.value
+  if (!newId) {
+    model.value = ''
+    return
+  }
+
+  const nextModel = value?.modelMappings?.[0]?.localModel || value?.defaultUpstreamId?.models?.[0] || value?.upstreamBindings?.[0]?.models?.[0] || ''
+  if (!oldId || newId !== oldId) {
+    model.value = nextModel
+  }
+})
+
+watch([history, systemPrompt, streamMode, selectedLocalKeyId, model], () => {
+  persistState()
+}, { deep: true })
+
+async function ensureRawKey(localKeyId) {
+  if (rawKeyCache.value[localKeyId]) return rawKeyCache.value[localKeyId]
+  const res = await adminApi.getLocalKeyRawKey(localKeyId)
+  rawKeyCache.value = {
+    ...rawKeyCache.value,
+    [localKeyId]: res.rawKey
+  }
+  return res.rawKey
+}
+
+function safeJsonParse(value, fallback) {
+  try {
+    return JSON.parse(value)
+  } catch (_) {
+    return fallback
+  }
+}
+
+function persistState() {
+  localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(history.value.slice(-80)))
+  localStorage.setItem(CHAT_SETTINGS_KEY, JSON.stringify({
+    selectedLocalKeyId: selectedLocalKeyId.value,
+    model: model.value,
+    systemPrompt: systemPrompt.value,
+    streamMode: streamMode.value
+  }))
+}
+
+function restoreState() {
+  const savedHistory = safeJsonParse(localStorage.getItem(CHAT_STORAGE_KEY) || '[]', [])
+  const savedSettings = safeJsonParse(localStorage.getItem(CHAT_SETTINGS_KEY) || '{}', {})
+
+  history.value = Array.isArray(savedHistory) ? savedHistory : []
+  selectedLocalKeyId.value = savedSettings.selectedLocalKeyId || ''
+  model.value = savedSettings.model || ''
+  systemPrompt.value = savedSettings.systemPrompt || ''
+  streamMode.value = savedSettings.streamMode !== undefined ? !!savedSettings.streamMode : true
+}
+
+function createMessage(role, content, extra = {}) {
+  return {
+    id: `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
+    role,
+    content,
+    createdAt: new Date().toISOString(),
+    ...extra
+  }
+}
+
+function getVisibleConversationMessages() {
+  const rows = history.value.filter(item => item.role === 'user' || item.role === 'assistant')
+  return rows.map(item => ({ role: item.role, content: item.content }))
+}
+
+function getRoleLabel(role) {
+  if (role === 'user') return '你'
+  if (role === 'assistant') return '助手'
+  return '系统'
+}
+
+function formatTime(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '--:--'
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function renderInlineMarkdown(value = '') {
+  return value
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/_([^_]+)_/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>')
+}
+
+function renderMarkdown(content = '') {
+  const escaped = escapeHtml(content || '')
+  const lines = escaped.split(/\r?\n/)
+  const blocks = []
+  let listItems = []
+  let inCodeBlock = false
+  let codeBuffer = []
+
+  const flushList = () => {
+    if (!listItems.length) return
+    blocks.push(`<ul>${listItems.map(item => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ul>`)
+    listItems = []
+  }
+
+  const flushCode = () => {
+    if (!codeBuffer.length) return
+    const codeContent = codeBuffer.join('\n')
+    const encoded = encodeURIComponent(codeContent)
+    blocks.push(`
+      <div class="chat-code-block">
+        <div class="chat-code-head">
+          <span class="chat-code-label">代码块</span>
+          <button type="button" class="chat-code-copy" data-copy-code="${encoded}">复制代码</button>
+        </div>
+        <pre><code>${codeContent}</code></pre>
+      </div>
+    `)
+    codeBuffer = []
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine ?? ''
+    const trimmed = line.trim()
+
+    if (trimmed.startsWith('```')) {
+      flushList()
+      if (inCodeBlock) {
+        flushCode()
+        inCodeBlock = false
+      } else {
+        inCodeBlock = true
+      }
+      continue
+    }
+
+    if (inCodeBlock) {
+      codeBuffer.push(line)
+      continue
+    }
+
+    if (!trimmed) {
+      flushList()
+      blocks.push('')
+      continue
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      listItems.push(trimmed.replace(/^[-*]\s+/, ''))
+      continue
+    }
+
+    flushList()
+
+    if (/^#{1,3}\s+/.test(trimmed)) {
+      const level = Math.min((trimmed.match(/^#+/) || ['#'])[0].length, 3)
+      const text = trimmed.replace(/^#{1,3}\s+/, '')
+      blocks.push(`<h${level}>${renderInlineMarkdown(text)}</h${level}>`)
+      continue
+    }
+
+    blocks.push(`<p>${renderInlineMarkdown(trimmed)}</p>`)
+  }
+
+  flushList()
+  flushCode()
+
+  return blocks.filter((block, index, arr) => block !== '' || (index > 0 && arr[index - 1] !== '')).join('')
+}
+
+function shouldRenderMarkdown(item) {
+  return item?.role === 'assistant' && Boolean(item?.content) && !item?.pending
+}
+
+function canUseAsDraft(item) {
+  return Boolean(item?.content)
+}
+
+function useAsDraft(item) {
+  if (!item?.content) return
+  draft.value = item.content
+}
+
+function applyStarter(text) {
+  draft.value = text
+}
+
+function retryFromUserMessage(item) {
+  if (!item?.content || sending.value) return
+  draft.value = item.content
+  sendMessage()
+}
+
+function showBubbleToolbar(item) {
+  return (item?.role === 'assistant' || item?.role === 'user') && Boolean(item?.content)
+}
+
+async function waitForPaint() {
+  await new Promise(resolve => requestAnimationFrame(() => resolve()))
+}
+
+async function scrollToBottom() {
+  await nextTick()
+  const el = messagesRef.value
+  if (el) el.scrollTop = el.scrollHeight
+}
+
+async function copyMessage(content) {
+  try {
+    await navigator.clipboard.writeText(content)
+    ElMessage.success('已复制')
+  } catch (_) {
+    const textarea = document.createElement('textarea')
+    textarea.value = content
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    ElMessage.success('已复制')
+  }
+}
+
+async function handleMessageAreaClick(event) {
+  const target = event.target instanceof HTMLElement ? event.target.closest('[data-copy-code]') : null
+  if (!target) return
+  const encoded = target.getAttribute('data-copy-code') || ''
+  if (!encoded) return
+  await copyMessage(decodeURIComponent(encoded))
+}
+
+function clearHistory() {
+  history.value = []
+  errorState.value = null
+  persistState()
+}
+
+function updateChatViewportHeight() {
+  if (typeof window === 'undefined') return
+  const shellEl = chatShellRef.value
+  if (!shellEl) return
+  const rect = shellEl.getBoundingClientRect()
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0
+  chatViewportHeight.value = Math.max(520, viewportHeight - rect.top - 24)
+}
+
+function handleComposerKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    sendMessage()
+  }
+}
+
+function stopGeneration() {
+  if (!sending.value) return
+  stopRequested.value = true
+  activeAbortController.value?.abort()
+}
+
+function extractAssistantText(data) {
+  return data?.choices?.map(item => item?.message?.content || item?.text || '').filter(Boolean).join('\n\n') || ''
+}
+
+function extractUsage(data) {
+  const usage = data?.usage || {}
+  return {
+    promptTokens: Number(usage.prompt_tokens || usage.input_tokens || 0),
+    completionTokens: Number(usage.completion_tokens || usage.output_tokens || 0),
+    totalTokens: Number(usage.total_tokens || 0)
+  }
+}
+
+function buildErrorState(err, fallbackPrompt = '') {
+  if (err?.name === 'AbortError' || stopRequested.value) {
+    return {
+      kind: 'muted',
+      chipClass: 'is-warning',
+      badge: '已停止',
+      title: '本次生成已手动停止',
+      desc: '你刚刚点了停止，所以这次回复被中断了。要继续的话，重新发送就行。',
+      detail: '',
+      suggestPrompt: fallbackPrompt
+    }
+  }
+
+  const status = Number(err?.status || 0)
+  const rawDetail = typeof err?.data === 'string'
+    ? err.data
+    : JSON.stringify(err?.data || { message: err?.message || '请求失败' }, null, 2)
+  const lowered = String(rawDetail || '').toLowerCase()
+
+  if (status === 401 || lowered.includes('unauthorized') || lowered.includes('invalid api key')) {
+    return {
+      kind: 'danger',
+      chipClass: 'is-danger',
+      badge: '鉴权失败',
+      title: '本地 Key 或上游鉴权没过',
+      desc: '先检查当前本地 Key 是否有效，或者它绑定的上游 Key 有没有填对。',
+      detail: rawDetail,
+      suggestPrompt: ''
+    }
+  }
+
+  if (lowered.includes('context size has been exceeded') || lowered.includes('maximum context length') || lowered.includes('context_length_exceeded')) {
+    return {
+      kind: 'warning',
+      chipClass: 'is-warning',
+      badge: '上下文超限',
+      title: '这轮对话太长了，模型塞不下',
+      desc: '可以清空历史、缩短输入，或者换更能装上下文的模型。',
+      detail: rawDetail,
+      suggestPrompt: '请基于当前需求，先帮我压缩上下文，再继续回答。'
+    }
+  }
+
+  if (status >= 500 || lowered.includes('overloaded') || lowered.includes('timeout') || lowered.includes('socket') || lowered.includes('tls')) {
+    return {
+      kind: 'danger',
+      chipClass: 'is-danger',
+      badge: '上游异常',
+      title: '上游模型服务现在不太正常',
+      desc: '可能是超时、过载或网络问题。你可以稍后重试，或者换一个上游/模型试试。',
+      detail: rawDetail,
+      suggestPrompt: fallbackPrompt
+    }
+  }
+
+  return {
+    kind: 'danger',
+    chipClass: 'is-danger',
+    badge: '请求失败',
+    title: '这次请求没跑通',
+    desc: '我把原始报错留在下面了，你可以复制去查，也可以直接改一下输入再试。',
+    detail: rawDetail,
+    suggestPrompt: fallbackPrompt
+  }
+}
+
+async function sendNonStream(rawKey, messages, assistantMessage, requestModel) {
+  const res = await fetch('/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${rawKey}`,
+      'Content-Type': 'application/json'
+    },
+    signal: activeAbortController.value?.signal,
+    body: JSON.stringify({
+      model: requestModel,
+      stream: false,
+      messages
+    })
+  })
+
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw { status: res.status, data }
+  }
+
+  assistantMessage.content = extractAssistantText(data)
+  assistantMessage.statusCode = res.status
+  assistantMessage.usage = extractUsage(data)
+}
+
+function getStreamChunkDelay(chunk) {
+  if (!chunk || /^\s+$/.test(chunk)) return 0
+  if (/[，。！？；：,.!?;:]$/.test(chunk)) return 42
+  if (/[）】》」』)\]}>]$/.test(chunk)) return 24
+  if (chunk.length >= 6) return 16
+  return 11
+}
+
+function splitForDisplay(text = '') {
+  const result = []
+  let buffer = ''
+
+  for (const char of text) {
+    buffer += char
+    if (/\s/.test(char) || /[，。！？；：,.!?;:]/.test(char) || buffer.length >= 2) {
+      result.push(buffer)
+      buffer = ''
+    }
+  }
+
+  if (buffer) result.push(buffer)
+  return result
+}
+
+async function pumpStreamQueue(assistantMessage, queue, state) {
+  if (state.running) return
+  state.running = true
+
+  while (!stopRequested.value && (queue.length || !state.done)) {
+    const chunk = queue.shift()
+    if (!chunk) {
+      await new Promise(resolve => setTimeout(resolve, 8))
+      continue
+    }
+
+    assistantMessage.content += chunk
+    state.renderCount = (state.renderCount || 0) + 1
+
+    await nextTick()
+    await waitForPaint()
+
+    if (state.renderCount % 3 === 0 || /[，。！？；：,.!?;:]$/.test(chunk) || queue.length === 0) {
+      await scrollToBottom()
+    }
+
+    const delay = getStreamChunkDelay(chunk)
+    if (delay > 0) {
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+
+  await scrollToBottom()
+  state.running = false
+}
+
+async function sendStream(rawKey, messages, assistantMessage, requestModel) {
+  const res = await fetch('/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${rawKey}`,
+      'Content-Type': 'application/json'
+    },
+    signal: activeAbortController.value?.signal,
+    body: JSON.stringify({
+      model: requestModel,
+      stream: true,
+      messages
+    })
+  })
+
+  if (!res.ok || !res.body) {
+    const data = await res.json().catch(() => ({}))
+    throw { status: res.status, data }
+  }
+
+  assistantMessage.statusCode = res.status
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  const queue = []
+  const streamState = { running: false, done: false, renderCount: 0 }
+  const pumpPromise = pumpStreamQueue(assistantMessage, queue, streamState)
+  let buffer = ''
+  let finalUsage = null
+
+  const handlePayload = (payload) => {
+    if (!payload || payload === '[DONE]') return
+
+    try {
+      const json = JSON.parse(payload)
+      const delta = json?.choices?.[0]?.delta?.content || json?.choices?.[0]?.text || ''
+      if (delta) {
+        queue.push(...splitForDisplay(delta))
+      }
+      if (json?.usage) {
+        finalUsage = extractUsage(json)
+      }
+    } catch (_) {
+      // ignore malformed chunk
+    }
+  }
+
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+
+    let boundaryIndex = buffer.indexOf('\n\n')
+    while (boundaryIndex !== -1) {
+      const part = buffer.slice(0, boundaryIndex)
+      buffer = buffer.slice(boundaryIndex + 2)
+
+      const lines = part.split('\n').filter(line => line.startsWith('data:'))
+      for (const line of lines) {
+        handlePayload(line.slice(5).trim())
+      }
+
+      boundaryIndex = buffer.indexOf('\n\n')
+    }
+  }
+
+  if (buffer.trim()) {
+    const lines = buffer.split('\n').filter(line => line.startsWith('data:'))
+    for (const line of lines) {
+      handlePayload(line.slice(5).trim())
+    }
+  }
+
+  streamState.done = true
+  await pumpPromise
+
+  if (finalUsage) assistantMessage.usage = finalUsage
+}
+
+async function sendMessage() {
+  await nextTick()
+
+  const requestLocalKeyId = selectedLocalKeyId.value
+  const requestModel = model.value.trim()
+  const requestDraft = draft.value.trim()
+
+  if (!requestLocalKeyId) return ElMessage.warning('先选一个本地 Key')
+  if (!requestModel) return ElMessage.warning('先填模型')
+  if (!requestDraft) return ElMessage.warning('先输入消息')
+
+  sending.value = true
+  errorState.value = null
+  stopRequested.value = false
+  activeAbortController.value = new AbortController()
+
+  const userMessage = createMessage('user', requestDraft, {
+    requestModel,
+    requestLocalKeyId
+  })
+  const assistantMessage = createMessage('assistant', '', {
+    pending: true,
+    requestModel,
+    requestLocalKeyId
+  })
+  history.value.push(userMessage, assistantMessage)
+  const currentDraft = requestDraft
+  draft.value = ''
+  await nextTick()
+  await scrollToBottom()
+
+  try {
+    const rawKey = await ensureRawKey(requestLocalKeyId)
+    const messages = []
+    if (systemPrompt.value.trim()) messages.push({ role: 'system', content: systemPrompt.value.trim() })
+    messages.push(...getVisibleConversationMessages().filter(item => item.content))
+
+    if (streamMode.value) {
+      await sendStream(rawKey, messages, assistantMessage, requestModel)
+    } else {
+      await sendNonStream(rawKey, messages, assistantMessage, requestModel)
+    }
+
+    if (!assistantMessage.content) {
+      assistantMessage.content = '上游返回成功了，但没给出可展示文本。'
+      errorState.value = {
+        kind: 'warning',
+        chipClass: 'is-warning',
+        badge: '空响应',
+        title: '接口成功了，但没吐出可展示内容',
+        desc: '这通常是上游只返回了结构数据，或者流式内容被截断了。你可以换个问法再试一下。',
+        detail: '',
+        suggestPrompt: currentDraft
+      }
+    }
+
+    assistantMessage.pending = false
+    await nextTick()
+    persistState()
+    await scrollToBottom()
+    requestAnimationFrame(() => {
+      scrollToBottom()
+    })
+  } catch (err) {
+    history.value = history.value.filter(item => item.id !== assistantMessage.id)
+    draft.value = currentDraft
+    errorState.value = buildErrorState(err, currentDraft)
+    if (err?.name === 'AbortError' || stopRequested.value) {
+      ElMessage.info('已停止生成')
+    } else {
+      ElMessage.error(errorState.value?.title || '请求失败')
+    }
+  } finally {
+    sending.value = false
+    activeAbortController.value = null
+    stopRequested.value = false
+  }
+}
+
+onMounted(async () => {
+  restoreState()
+  localKeys.value = await adminApi.getLocalKeys().catch(() => [])
+  if (enabledLocalKeys.value.length && !selectedLocalKeyId.value) {
+    selectedLocalKeyId.value = enabledLocalKeys.value[0].id
+  }
+  await nextTick()
+  updateChatViewportHeight()
+  window.addEventListener('resize', updateChatViewportHeight)
+  await scrollToBottom()
+})
+
+watch([errorState, draft], async () => {
+  await nextTick()
+  updateChatViewportHeight()
+})
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', updateChatViewportHeight)
+  }
+})
+</script>
