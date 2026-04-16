@@ -293,11 +293,15 @@ async function loadLogs() {
   const now = new Date()
   const from = new Date(now)
   from.setDate(from.getDate() - days)
-  logs.value = await adminApi.getRequestLogs({
-    limit,
+
+  const res = await adminApi.getRequestLogs({
+    page: 1,
+    pageSize: limit,
     from: from.toISOString(),
     to: now.toISOString()
-  }).catch(() => [])
+  }).catch(() => ({ rows: [] }))
+
+  logs.value = Array.isArray(res?.rows) ? res.rows : []
 }
 
 function buildRequestChart() {

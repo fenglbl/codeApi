@@ -47,6 +47,12 @@
               </template>
             </el-table-column>
 
+            <el-table-column label="tokens(输入/输出)" min-width="190">
+              <template #default="scope">
+                <div class="metric-pair metric-pair-mono">{{ formatTokenPair(scope.row) }}</div>
+              </template>
+            </el-table-column>
+
             <el-table-column label="操作" width="280" fixed="right">
               <template #default="scope">
                 <div class="row-actions">
@@ -188,6 +194,15 @@ function formatDate(value) {
   const hh = String(date.getHours()).padStart(2, '0')
   const mm = String(date.getMinutes()).padStart(2, '0')
   return `${y}-${m}-${d} ${hh}:${mm}`
+}
+
+function formatNumber(value) {
+  const num = Number(value) || 0
+  return num.toLocaleString('en-US')
+}
+
+function formatTokenPair(row) {
+  return `${formatNumber(row?.promptTokens || 0)} / ${formatNumber(row?.completionTokens || 0)}`
 }
 
 function normalizeModels(list) {

@@ -33,7 +33,9 @@ function serialize(doc) {
 
 async function list(req, res, next) {
   try {
-    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 5000);
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const pageSize = Math.min(Math.max(Number(req.query.pageSize || req.query.limit) || 50, 1), 200);
+    const skip = (page - 1) * pageSize;
     const query = {};
 
     if (req.query.path) {
@@ -74,13 +76,22 @@ async function list(req, res, next) {
       }
     }
 
-    const rows = await RequestLog.find(query)
-      .populate('localKeyId', 'name keyPrefix')
-      .populate('upstreamId', 'name baseUrl')
-      .sort({ createdAt: -1 })
-      .limit(limit);
+    const [total, rows] = await Promise.all([
+      RequestLog.countDocuments(query),
+      RequestLog.find(query)
+        .populate('localKeyId', 'name keyPrefix')
+        .populate('upstreamId', 'name baseUrl')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(pageSize)
+    ]);
 
-    res.json(rows.map(serialize));
+    res.json({
+      rows: rows.map(serialize),
+      total,
+      page,
+      pageSize
+    });
   } catch (err) {
     next(err);
   }

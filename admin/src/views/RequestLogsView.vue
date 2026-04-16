@@ -45,7 +45,7 @@
         </div>
 
         <div class="table-toolbar">
-          <div class="muted">最近 50 条请求日志。已支持 token、缓存、字数统计和流式标记。</div>
+          <div class="muted">支持按页查看请求日志。已支持 token、缓存、字数统计和流式标记。</div>
           <div class="table-toolbar-actions">
             <el-switch v-model="compactMode" inline-prompt active-text="紧凑" inactive-text="舒展" />
           </div>
@@ -106,10 +106,10 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="耗时/首字" min-width="190">
+          <el-table-column label="耗时 / 首字 / 模式" min-width="240">
             <template #default="scope">
-              <div class="metric-pair metric-pair-mono">{{ formatLatency(scope.row) }}</div>
-              <div class="log-mode-wrap">
+              <div class="log-latency-line">
+                <span class="metric-pair metric-pair-mono">{{ formatLatency(scope.row) }}</span>
                 <span class="log-mode-chip" :class="scope.row.isStream ? 'is-stream' : 'is-non-stream'">
                   {{ scope.row.isStream ? '流' : '非流' }}
                 </span>
@@ -139,6 +139,20 @@
             </template>
           </el-table-column>
           </el-table>
+        </div>
+
+        <div v-if="rows.length" class="table-pagination-bar">
+          <div class="muted">共 {{ formatNumber(total) }} 条，当前第 {{ page }} / {{ totalPages }} 页</div>
+          <el-pagination
+            background
+            layout="prev, pager, next, sizes"
+            :current-page="page"
+            :page-size="pageSize"
+            :page-sizes="[20, 50, 100]"
+            :total="total"
+            @current-change="handlePageChange"
+            @size-change="handlePageSizeChange"
+          />
         </div>
 
         <div v-else-if="!loading" class="empty-state">
@@ -173,6 +187,9 @@ const localKeys = ref([])
 const upstreams = ref([])
 const expandedErrors = ref({})
 const quickMode = ref('all')
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(50)
 const tableMaxHeight = 'calc(100vh - 360px)'
 const filters = reactive({
   path: '',
@@ -188,6 +205,8 @@ const displayRows = computed(() => {
   if (quickMode.value === 'contextExceeded') return rows.value.filter(item => String(item.errorMessage || '').toLowerCase().includes('context size has been exceeded'))
   return rows.value
 })
+
+const totalPages = computed(() => Math.max(1, Math.ceil((total.value || 0) / pageSize.value)))
 
 function safeJsonParse(value, fallback) {
   try {
@@ -225,12 +244,15 @@ function formatTokenPair(row) {
 }
 
 function formatLatency(row) {
-  const duration = row?.durationMs || 0
+  const durationMs = Number(row?.durationMs || 0)
+  const firstByteMs = Number(row?.firstByteMs || 0)
+  const formatSeconds = value => `${(value / 1000).toFixed(2)} s`
+
   if (row?.isStream) {
-    const firstByte = row?.firstByteMs || 0
-    return `${duration} ms / ${firstByte > 0 ? `${firstByte} ms` : '--'}`
+    return `${formatSeconds(durationMs)} / ${firstByteMs > 0 ? formatSeconds(firstByteMs) : '--'}`
   }
-  return `${duration} ms`
+
+  return `${formatSeconds(durationMs)} / --`
 }
 
 function statusChipClass(code) {
@@ -282,6 +304,19 @@ function toggleError(id) {
 
 function applyQuickFilter(mode) {
   quickMode.value = mode
+  page.value = 1
+  load()
+}
+
+function handlePageChange(nextPage) {
+  page.value = nextPage
+  load()
+}
+
+function handlePageSizeChange(nextSize) {
+  pageSize.value = nextSize
+  page.value = 1
+  load()
 }
 
 async function copyText(text) {
@@ -361,13 +396,18 @@ async function loadOptions() {
 async function load() {
   loading.value = true
   try {
-    rows.value = await adminApi.getRequestLogs({
-      limit: 50,
+    const res = await adminApi.getRequestLogs({
+      page: page.value,
+      pageSize: pageSize.value,
       path: filters.path || undefined,
       statusCode: filters.statusCode || undefined,
       localKeyId: filters.localKeyId || undefined,
       upstreamId: filters.upstreamId || undefined
     })
+    rows.value = Array.isArray(res?.rows) ? res.rows : []
+    total.value = Number(res?.total || 0)
+    page.value = Number(res?.page || page.value || 1)
+    pageSize.value = Number(res?.pageSize || pageSize.value || 50)
   } catch (err) {
     ElMessage.error(err.message || '加载日志失败')
   } finally {
@@ -381,6 +421,7 @@ function resetFilters() {
   filters.localKeyId = ''
   filters.upstreamId = ''
   quickMode.value = 'all'
+  page.value = 1
   load()
 }
 

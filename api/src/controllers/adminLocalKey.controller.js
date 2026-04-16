@@ -1,4 +1,5 @@
 const LocalApiKey = require('../models/LocalApiKey');
+const RequestLog = require('../models/RequestLog');
 const { generateLocalApiKey, hashKey, getKeyPrefix } = require('../utils/key');
 const { encrypt, decrypt } = require('../services/crypto.service');
 
@@ -8,7 +9,7 @@ function maskKey(rawKey) {
   return `${rawKey.slice(0, 10)}******${rawKey.slice(-6)}`;
 }
 
-function serialize(doc) {
+function serialize(doc, tokenStats = {}) {
   const rawKey = doc.rawKeyEncrypted && doc.rawKeyIv ? decrypt(doc.rawKeyEncrypted, doc.rawKeyIv) : '';
   return {
     id: doc._id,
@@ -22,6 +23,8 @@ function serialize(doc) {
     modelMappings: doc.modelMappings || [],
     lastUsedAt: doc.lastUsedAt,
     usageCount: doc.usageCount,
+    promptTokens: tokenStats.promptTokens || 0,
+    completionTokens: tokenStats.completionTokens || 0,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt
   };
@@ -30,7 +33,22 @@ function serialize(doc) {
 async function list(req, res, next) {
   try {
     const rows = await LocalApiKey.find().populate('upstreamBindings defaultUpstreamId').sort({ createdAt: -1 });
-    res.json(rows.map(serialize));
+    const ids = rows.map(item => item._id);
+    const tokenRows = await RequestLog.aggregate([
+      { $match: { localKeyId: { $in: ids } } },
+      {
+        $group: {
+          _id: '$localKeyId',
+          promptTokens: { $sum: { $ifNull: ['$promptTokens', 0] } },
+          completionTokens: { $sum: { $ifNull: ['$completionTokens', 0] } }
+        }
+      }
+    ]);
+    const tokenMap = new Map(tokenRows.map(item => [String(item._id), {
+      promptTokens: item.promptTokens || 0,
+      completionTokens: item.completionTokens || 0
+    }]));
+    res.json(rows.map(row => serialize(row, tokenMap.get(String(row._id)) || {})));
   } catch (err) { next(err); }
 }
 

@@ -1441,6 +1441,25 @@ select {
   gap: 8px;
 }
 
+.table-pagination-bar {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.table-pagination-bar .el-pagination {
+  --el-pagination-bg-color: rgba(15, 23, 42, 0.9);
+  --el-pagination-text-color: #cbd5e1;
+  --el-pagination-button-color: #cbd5e1;
+  --el-pagination-button-bg-color: rgba(15, 23, 42, 0.9);
+  --el-pagination-button-disabled-bg-color: rgba(15, 23, 42, 0.4);
+  --el-pagination-button-disabled-color: rgba(148, 163, 184, 0.5);
+  --el-pagination-hover-color: #93c5fd;
+}
+
 .log-error-text {
   color: #fca5a5;
   white-space: pre-wrap;
@@ -1552,6 +1571,13 @@ select {
 
 .log-mode-chip.is-non-stream {
   color: #cbd5e1;
+}
+
+.log-latency-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .log-table-shell .metric-badge {
