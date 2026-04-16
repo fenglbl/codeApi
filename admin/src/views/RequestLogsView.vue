@@ -94,17 +94,40 @@
             :max-height="tableMaxHeight"
           >
           <el-table-column label="时间" min-width="180">
-            <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
+            <template #default="scope">
+              <div class="log-request-cell">
+                <div class="primary-cell">{{ formatTime(scope.row.createdAt) }}</div>
+              </div>
+            </template>
           </el-table-column>
-          <el-table-column label="路径" prop="path" min-width="180" />
+          <el-table-column label="路径" prop="path" min-width="180">
+            <template #default="scope">
+              <div class="log-request-cell">
+                <div class="primary-cell">{{ scope.row.path || '--' }}</div>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column label="模型" min-width="160">
-            <template #default="scope">{{ scope.row.model || '--' }}</template>
+            <template #default="scope">
+              <div class="log-request-cell">
+                <div class="primary-cell">{{ scope.row.model || '--' }}</div>
+              </div>
+            </template>
           </el-table-column>
           <el-table-column label="本地 Key" min-width="180">
-            <template #default="scope">{{ scope.row.localKey?.name || '--' }}<span class="muted" v-if="scope.row.localKey?.keyPrefix"> ({{ scope.row.localKey.keyPrefix }})</span></template>
+            <template #default="scope">
+              <div class="log-route-cell">
+                <div class="primary-cell">{{ scope.row.localKey?.name || '--' }}</div>
+                <div class="cell-sub" v-if="scope.row.localKey?.keyPrefix">{{ scope.row.localKey.keyPrefix }}</div>
+              </div>
+            </template>
           </el-table-column>
           <el-table-column label="上游" min-width="160">
-            <template #default="scope">{{ scope.row.upstream?.name || '--' }}</template>
+            <template #default="scope">
+              <div class="log-route-cell">
+                <div class="primary-cell">{{ scope.row.upstream?.name || '--' }}</div>
+              </div>
+            </template>
           </el-table-column>
           <el-table-column label="状态码" width="108">
             <template #default="scope">
@@ -124,27 +147,33 @@
           </el-table-column>
           <el-table-column label="token(输入/输出)" min-width="220">
             <template #default="scope">
-              <div class="metric-pair metric-pair-mono">{{ formatTokenPair(scope.row) }}</div>
-              <div class="log-metric-meta">
-                <span class="metric-badge">缓存读 {{ formatNumber(scope.row.cacheReadTokens) }}</span>
+              <div class="log-metric-cell">
+                <div class="metric-pair metric-pair-mono">{{ formatTokenPair(scope.row) }}</div>
+                <div class="log-metric-meta">
+                  <span class="metric-badge">缓存读 {{ formatNumber(scope.row.cacheReadTokens) }}</span>
+                </div>
               </div>
             </template>
           </el-table-column>
           <el-table-column label="字数" min-width="150">
             <template #default="scope">
-              <div class="metric-stack">
-                <div><span class="metric-label">入</span><span class="metric-value metric-pair-mono">{{ formatNumber(scope.row.inputChars) }}</span></div>
-                <div><span class="metric-label">出</span><span class="metric-value metric-pair-mono">{{ formatNumber(scope.row.outputChars) }}</span></div>
+              <div class="log-metric-cell">
+                <div class="metric-stack">
+                  <div><span class="metric-label">入</span><span class="metric-value metric-pair-mono">{{ formatNumber(scope.row.inputChars) }}</span></div>
+                  <div><span class="metric-label">出</span><span class="metric-value metric-pair-mono">{{ formatNumber(scope.row.outputChars) }}</span></div>
+                </div>
               </div>
             </template>
           </el-table-column>
           <el-table-column label="耗时 / 首字 / 模式" min-width="240">
             <template #default="scope">
-              <div class="log-latency-line">
-                <span class="metric-pair metric-pair-mono">{{ formatLatency(scope.row) }}</span>
-                <span class="log-mode-chip" :class="scope.row.isStream ? 'is-stream' : 'is-non-stream'">
-                  {{ scope.row.isStream ? '流' : '非流' }}
-                </span>
+              <div class="log-metric-cell">
+                <div class="log-latency-line">
+                  <span class="metric-pair metric-pair-mono">{{ formatLatency(scope.row) }}</span>
+                  <span class="log-mode-chip" :class="scope.row.isStream ? 'is-stream' : 'is-non-stream'">
+                    {{ scope.row.isStream ? '流' : '非流' }}
+                  </span>
+                </div>
               </div>
             </template>
           </el-table-column>

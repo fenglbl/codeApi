@@ -532,6 +532,25 @@ select {
   font-weight: 700;
 }
 
+.log-request-cell,
+.log-route-cell,
+.log-metric-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.log-request-cell {
+  padding-left: 2px;
+}
+
+.log-route-cell,
+.log-metric-cell {
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.05);
+}
+
 .code-inline {
   display: inline-flex;
   align-items: center;
@@ -1253,7 +1272,9 @@ select {
 :root[data-theme='light'] .table-pagination-bar .el-pagination .btn-prev,
 :root[data-theme='light'] .table-pagination-bar .el-pagination .btn-next,
 :root[data-theme='light'] .table-pagination-bar .el-pagination .el-pager li,
-:root[data-theme='light'] .log-table-shell .metric-pair {
+:root[data-theme='light'] .log-table-shell .metric-pair,
+:root[data-theme='light'] .log-route-cell,
+:root[data-theme='light'] .log-metric-cell {
   background: rgba(255, 255, 255, 0.92);
 }
 
@@ -2619,6 +2640,12 @@ select {
   font-size: 12px;
 }
 
+.log-request-cell .primary-cell,
+.log-route-cell .primary-cell,
+.log-metric-cell .primary-cell {
+  font-size: 13px;
+}
+
 .log-table-shell .metric-badge {
   padding: 3px 8px;
   font-size: 11px;
@@ -2627,6 +2654,12 @@ select {
 .log-table-shell .metric-badge,
 .log-table-shell .code-inline {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.log-route-cell .cell-sub,
+.log-request-cell .cell-sub,
+.log-metric-cell .cell-sub {
+  margin-top: 0;
 }
 
 .el-table .log-row-warning td.el-table__cell {
