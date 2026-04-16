@@ -173,8 +173,11 @@
           </el-table>
         </div>
 
-        <div v-if="rows.length" class="table-pagination-bar">
-          <div class="muted">共 {{ formatNumber(total) }} 条，当前第 {{ page }} / {{ totalPages }} 页</div>
+        <div v-if="rows.length" class="table-pagination-bar log-pagination-bar">
+          <div class="log-pagination-meta">
+            <div class="log-pagination-title">日志分页</div>
+            <div class="muted">共 {{ formatNumber(total) }} 条，当前第 {{ page }} / {{ totalPages }} 页</div>
+          </div>
           <el-pagination
             background
             layout="prev, pager, next, sizes"

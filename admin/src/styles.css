@@ -1241,7 +1241,8 @@ select {
 :root[data-theme='light'] .row-actions .action-link,
 :root[data-theme='light'] .log-filters-panel,
 :root[data-theme='light'] .metric-stack > div,
-:root[data-theme='light'] .log-latency-line .metric-pair {
+:root[data-theme='light'] .log-latency-line .metric-pair,
+:root[data-theme='light'] .log-pagination-bar .el-pagination {
   background: rgba(255, 255, 255, 0.92);
 }
 
@@ -2373,6 +2374,23 @@ select {
   flex-wrap: wrap;
 }
 
+.log-pagination-bar {
+  padding: 12px 14px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.log-pagination-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log-pagination-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--heading);
+}
+
 .table-pagination-bar .el-pagination {
   --el-pagination-bg-color: var(--panel-soft);
   --el-pagination-text-color: var(--text);
@@ -2381,6 +2399,12 @@ select {
   --el-pagination-button-disabled-bg-color: rgba(148, 163, 184, 0.12);
   --el-pagination-button-disabled-color: rgba(148, 163, 184, 0.5);
   --el-pagination-hover-color: var(--primary);
+}
+
+.log-pagination-bar .el-pagination {
+  padding: 6px 8px;
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.06);
 }
 
 .log-error-text {
