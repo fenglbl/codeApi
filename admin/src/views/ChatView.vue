@@ -176,16 +176,6 @@
           </div>
         </div>
 
-        <div class="chat-settings-card">
-          <div class="chat-settings-card-head">
-            <div>
-              <div class="chat-settings-card-title">流式调试日志</div>
-              <div class="chat-settings-card-desc">打开后会把 reader.read、拆包、入队、渲染等关键时间点打到浏览器 console。默认只用于排查流式显示问题。</div>
-            </div>
-            <el-switch v-model="streamDebug" active-text="开启" inactive-text="关闭" />
-          </div>
-          <div class="cell-sub">调试时按 F12 看 Console；关闭后不会继续打这些日志。</div>
-        </div>
       </div>
       <template #footer>
         <el-button class="toolbar-ghost-btn" @click="settingsVisible = false">关闭</el-button>
@@ -212,7 +202,6 @@ const router = useRouter()
 const CHAT_STORAGE_KEY = 'codeaip_chat_history_v1'
 const CHAT_SETTINGS_KEY = 'codeaip_chat_settings_v1'
 const CHAT_EXTERNAL_DRAFT_STORAGE_KEY = 'codeaip_chat_external_draft_v1'
-const CHAT_STREAM_DEBUG_STORAGE_KEY = 'codeaip_chat_stream_debug_v1'
 const DEFAULT_SYSTEM_PROMPT = `你是 CodeAip 项目的内置 AI 助理，同时也是一个偏工程落地的高级工程师。
 
 你的职责：
@@ -251,7 +240,6 @@ const sending = ref(false)
 const errorState = ref(null)
 const rawKeyCache = ref({})
 const history = ref([])
-const streamDebug = ref(false)
 const messagesRef = ref(null)
 const chatShellRef = ref(null)
 const activeAbortController = ref(null)
@@ -322,7 +310,7 @@ watch(model, (value) => {
 
 // 这里是聊天页的本地保存入口。
 // 只要聊天记录、系统提示词、流式开关、key/model、重试次数变化，就写回 localStorage。
-watch([history, systemPrompt, streamMode, selectedLocalKeyId, model, retryCount, streamDebug], () => {
+watch([history, systemPrompt, streamMode, selectedLocalKeyId, model, retryCount], () => {
   persistState()
 }, { deep: true })
 
@@ -346,13 +334,6 @@ function safeJsonParse(value, fallback) {
 
 // 持久化时只写本地存储，不直接回写响应式源，
 // 避免出现 watch -> persistState -> 再改源 -> 再触发 watch 的自循环。
-function debugStream(stage, payload = {}) {
-  if (!streamDebug.value || typeof console === 'undefined') return
-  const now = new Date()
-  const stamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}.${String(now.getMilliseconds()).padStart(3, '0')}`
-  console.log(`[CodeAip stream][${stamp}] ${stage}`, payload)
-}
-
 function persistState() {
   const nextModelByLocalKey = selectedLocalKeyId.value
     ? {
@@ -368,8 +349,7 @@ function persistState() {
     modelByLocalKey: nextModelByLocalKey,
     systemPrompt: systemPrompt.value,
     streamMode: streamMode.value,
-    retryCount: retryCount.value,
-    streamDebug: streamDebug.value
+    retryCount: retryCount.value
   }))
 }
 
@@ -388,7 +368,6 @@ function restoreState() {
   systemPrompt.value = savedSettings.systemPrompt || DEFAULT_SYSTEM_PROMPT
   streamMode.value = savedSettings.streamMode !== undefined ? !!savedSettings.streamMode : true
   retryCount.value = Number.isFinite(Number(savedSettings.retryCount)) ? Math.max(0, Math.min(5, Number(savedSettings.retryCount))) : 3
-  streamDebug.value = savedSettings.streamDebug !== undefined ? !!savedSettings.streamDebug : false
 }
 
 function createMessage(role, content, extra = {}) {
@@ -788,7 +767,6 @@ function takeVisibleBatch(queue) {
 // 这里已经不再追求“贴近真实到达速度”，而是强制走可见打字机：
 // 每次只吐一个字符，并按字符类型决定停顿时长。
 async function pumpStreamQueue(assistantMessage, queue, state) {
-  debugStream('pump:start', { queueLength: queue.length })
   if (state.running) return
   state.running = true
   state.lastFlushAt = 0
@@ -809,33 +787,16 @@ async function pumpStreamQueue(assistantMessage, queue, state) {
       await new Promise(resolve => setTimeout(resolve, delay - elapsed))
     }
 
-    debugStream('pump:dequeue', {
-      batchPreview: batch.slice(0, 160),
-      batchLength: batch.length,
-      queueLengthAfterShift: queue.length,
-      renderedLengthBefore: assistantMessage.content.length
-    })
-
     assistantMessage.content += batch
     assistantMessage.renderTick = (assistantMessage.renderTick || 0) + 1
     state.renderCount = (state.renderCount || 0) + 1
     state.lastFlushAt = Date.now()
-
-    debugStream('pump:rendered', {
-      renderCount: state.renderCount,
-      renderedLengthAfter: assistantMessage.content.length,
-      renderTick: assistantMessage.renderTick
-    })
 
     await nextTick()
     scheduleScrollToBottom()
   }
 
   await scrollToBottom()
-  debugStream('pump:done', {
-    renderCount: state.renderCount,
-    finalLength: assistantMessage.content.length
-  })
   state.running = false
 }
 
@@ -878,7 +839,6 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
   // 处理单条 SSE data: 后面的 JSON 负载。
   // 这里只负责“解析 -> 把 delta 放进 queue”，不直接碰 DOM。
   const handlePayload = (payload) => {
-    debugStream('sse:payload', { payloadPreview: String(payload || '').slice(0, 160) })
     if (!payload || payload === '[DONE]') return
 
     try {
@@ -887,12 +847,6 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
       if (delta) {
         const pieces = splitForDisplay(delta)
         queue.push(...pieces)
-        debugStream('sse:enqueue', {
-          deltaPreview: delta.slice(0, 160),
-          deltaLength: delta.length,
-          pieces: pieces.length,
-          queueLengthAfterPush: queue.length
-        })
       }
       if (json?.usage) {
         finalUsage = extractUsage(json)
@@ -907,11 +861,6 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
   // 如果上游/代理层交付节奏和这里预期不一致，就可能出现：
   // 数据其实到了，但得等到攒够分隔符才会进入 handlePayload。
   const flushBuffer = (force = false) => {
-    debugStream('buffer:flush:before', {
-      force,
-      bufferLength: buffer.length,
-      bufferPreview: buffer.slice(0, 160)
-    })
     const normalized = force ? buffer : buffer.replace(/\r\n/g, '\n')
     const parts = normalized.split(/\n\n/)
 
@@ -921,11 +870,6 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
     }
 
     const completeParts = force ? parts : parts.slice(0, -1)
-    debugStream('buffer:flush:parts', {
-      force,
-      totalParts: parts.length,
-      completeParts: completeParts.length
-    })
     for (const part of completeParts) {
       const lines = part.split(/\n/).map(line => line.trim()).filter(line => line.startsWith('data:'))
       for (const line of lines) {
@@ -940,16 +884,8 @@ async function sendStream(rawKey, messages, assistantMessage, requestModel) {
   // 如果想判断“是不是后端压根没流”，这里最适合加时间戳日志。
   while (true) {
     const { value, done } = await reader.read()
-    debugStream('reader:read', {
-      done,
-      chunkBytes: value?.byteLength || 0
-    })
     if (done) break
     buffer += decoder.decode(value, { stream: true })
-    debugStream('reader:decoded', {
-      bufferLength: buffer.length,
-      bufferPreview: buffer.slice(0, 160)
-    })
     flushBuffer(false)
   }
 
@@ -1014,11 +950,6 @@ async function sendMessage() {
     let lastError = null
     // 自动重试发生在这里：一次发送请求里，最多走 retryCount + 1 轮尝试。
     for (let attempt = 0; attempt <= retryCount.value; attempt += 1) {
-      debugStream('request:attempt', {
-        attempt,
-        mode: streamMode.value ? 'stream' : 'non-stream',
-        requestModel
-      })
       liveAssistantMessage.retryCount = attempt
       liveAssistantMessage.pending = true
       liveAssistantMessage.content = ''
