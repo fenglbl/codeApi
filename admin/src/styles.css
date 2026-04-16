@@ -1242,7 +1242,10 @@ select {
 :root[data-theme='light'] .log-filters-panel,
 :root[data-theme='light'] .metric-stack > div,
 :root[data-theme='light'] .log-latency-line .metric-pair,
-:root[data-theme='light'] .log-pagination-bar .el-pagination {
+:root[data-theme='light'] .log-pagination-bar .el-pagination,
+:root[data-theme='light'] .table-pagination-bar .el-pagination .btn-prev,
+:root[data-theme='light'] .table-pagination-bar .el-pagination .btn-next,
+:root[data-theme='light'] .table-pagination-bar .el-pagination .el-pager li {
   background: rgba(255, 255, 255, 0.92);
 }
 
@@ -2420,6 +2423,26 @@ select {
   --el-pagination-button-disabled-bg-color: rgba(148, 163, 184, 0.12);
   --el-pagination-button-disabled-color: rgba(148, 163, 184, 0.5);
   --el-pagination-hover-color: var(--primary);
+}
+
+.table-pagination-bar .el-pagination .btn-prev,
+.table-pagination-bar .el-pagination .btn-next,
+.table-pagination-bar .el-pagination .el-pager li {
+  background: var(--panel-soft) !important;
+  color: var(--text) !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+}
+
+.table-pagination-bar .el-pagination .btn-prev:hover,
+.table-pagination-bar .el-pagination .btn-next:hover,
+.table-pagination-bar .el-pagination .el-pager li:hover {
+  color: var(--primary) !important;
+}
+
+.table-pagination-bar .el-pagination .btn-prev:disabled,
+.table-pagination-bar .el-pagination .btn-next:disabled {
+  background: rgba(148, 163, 184, 0.12) !important;
+  color: rgba(148, 163, 184, 0.5) !important;
 }
 
 .log-pagination-bar .el-pagination {
