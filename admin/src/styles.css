@@ -516,6 +516,7 @@ select {
 .primary-cell {
   font-weight: 700;
   color: var(--text);
+  line-height: 1.4;
 }
 
 .cell-sub {
@@ -523,6 +524,12 @@ select {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.log-table-shell .primary-cell,
+.log-table-shell .metric-pair,
+.log-table-shell .metric-value {
+  font-weight: 700;
 }
 
 .code-inline {
@@ -1245,7 +1252,8 @@ select {
 :root[data-theme='light'] .log-pagination-bar .el-pagination,
 :root[data-theme='light'] .table-pagination-bar .el-pagination .btn-prev,
 :root[data-theme='light'] .table-pagination-bar .el-pagination .btn-next,
-:root[data-theme='light'] .table-pagination-bar .el-pagination .el-pager li {
+:root[data-theme='light'] .table-pagination-bar .el-pagination .el-pager li,
+:root[data-theme='light'] .log-table-shell .metric-pair {
   background: rgba(255, 255, 255, 0.92);
 }
 
@@ -1540,6 +1548,12 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.log-table-shell .metric-pair {
+  padding: 5px 8px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.06);
 }
 
 .metric-pair-mono {
@@ -2538,6 +2552,13 @@ select {
   line-height: 1;
 }
 
+.log-table-shell .status-chip,
+.log-table-shell .error-type-chip,
+.log-table-shell .log-mode-chip {
+  min-height: 24px;
+  font-weight: 700;
+}
+
 .status-chip-dot {
   width: 5px;
   height: 5px;
@@ -2594,9 +2615,18 @@ select {
   background: rgba(148, 163, 184, 0.06);
 }
 
+.log-table-shell .muted {
+  font-size: 12px;
+}
+
 .log-table-shell .metric-badge {
   padding: 3px 8px;
   font-size: 11px;
+}
+
+.log-table-shell .metric-badge,
+.log-table-shell .code-inline {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .el-table .log-row-warning td.el-table__cell {
