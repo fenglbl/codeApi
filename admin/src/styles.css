@@ -1885,6 +1885,20 @@ select {
   line-height: 1.7;
 }
 
+.chat-empty-checklist {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.mini-tag.is-ok {
+  color: #bbf7d0;
+  border-color: rgba(74, 222, 128, 0.22);
+  background: rgba(20, 83, 45, 0.22);
+}
+
 
 .chat-error-bar {
   margin: 0 18px 14px;

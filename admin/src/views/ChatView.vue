@@ -24,7 +24,7 @@
           <span class="state-chip">{{ streamMode ? '流式输出' : '非流输出' }}</span>
           <span v-if="sending" class="state-chip is-warning">生成中</span>
           <el-button v-if="sending" type="danger" plain class="toolbar-danger-btn" @click="stopGeneration">停止生成</el-button>
-          <el-button class="toolbar-ghost-btn" @click="clearHistory" :disabled="sending">清空历史</el-button>
+          <el-button class="toolbar-ghost-btn" @click="clearHistory" :disabled="sending || !history.length">清空历史</el-button>
           <el-button class="toolbar-ghost-btn chat-settings-btn" @click="settingsVisible = true">设置</el-button>
         </div>
       </div>
@@ -78,6 +78,11 @@
           <div class="chat-empty-badge">CodeAip Chat</div>
           <div class="chat-empty-title">还没有聊天记录</div>
           <div class="chat-empty-desc">选个 Key 和模型，直接开聊。这里现在就是聊天页，不再给你塞那些演示玩具按钮。</div>
+          <div class="chat-empty-checklist">
+            <span class="mini-tag" :class="selectedLocalKey ? 'is-ok' : ''">{{ selectedLocalKey ? '已选本地 Key' : '先选本地 Key' }}</span>
+            <span class="mini-tag" :class="model ? 'is-ok' : ''">{{ model ? `模型：${model}` : '先选模型' }}</span>
+            <span class="mini-tag" :class="draft.trim() ? 'is-ok' : ''">{{ draft.trim() ? '输入框已就绪' : '输入问题后可直接发送' }}</span>
+          </div>
         </div>
       </div>
 
@@ -108,17 +113,17 @@
           :autosize="{ minRows: 4, maxRows: 10 }"
           resize="none"
           class="chat-composer-input"
-          placeholder="输入消息，Enter 发送，Shift + Enter 换行。"
+          :placeholder="composerPlaceholder"
           @keydown="handleComposerKeydown"
         />
         <div class="chat-composer-actions">
           <div class="chat-composer-left muted">
-            <span>系统提示词在左上角设置里；历史会保存在当前浏览器。</span>
+            <span>{{ composerHint }}</span>
             <span class="chat-composer-count">{{ draft.length }} 字</span>
           </div>
           <div class="chat-composer-right">
             <el-button v-if="sending" type="danger" plain class="toolbar-danger-btn" @click="stopGeneration">停止</el-button>
-            <el-button type="primary" class="toolbar-primary-btn" :loading="sending" @click="sendMessage">发送</el-button>
+            <el-button type="primary" class="toolbar-primary-btn" :loading="sending" :disabled="!canSend" @click="sendMessage">发送</el-button>
           </div>
         </div>
       </div>
@@ -267,6 +272,21 @@ const suggestedModels = computed(() => {
   ].filter(Boolean)
 
   return [...new Set([...mappedLocalModels, ...mappedUpstreamModels, ...upstreamModels])].slice(0, 16)
+})
+
+const canSend = computed(() => Boolean(selectedLocalKeyId.value && model.value.trim() && draft.value.trim()) && !sending.value)
+
+const composerPlaceholder = computed(() => {
+  if (!selectedLocalKeyId.value) return '先选一个本地 Key，再开始聊天。'
+  if (!model.value.trim()) return '先选一个模型，再输入消息。'
+  return '输入消息，Enter 发送，Shift + Enter 换行。'
+})
+
+const composerHint = computed(() => {
+  if (sending.value) return '正在生成中，可以继续看输出，也可以随时点停止。'
+  if (!selectedLocalKeyId.value) return '先选本地 Key；系统提示词和重试次数在左上角设置里。'
+  if (!model.value.trim()) return 'Key 已选好，再挑一个模型就能发。'
+  return '系统提示词在左上角设置里；历史会保存在当前浏览器。'
 })
 
 const chatShellVars = computed(() => {
@@ -739,33 +759,87 @@ async function sendNonStream(rawKey, messages, assistantMessage, requestModel) {
   assistantMessage.usage = extractUsage(data)
 }
 
-// 这里直接做“前端假打字机层”：
-// - 上游来多快都不直接决定可见速度
-// - UI 永远按固定节奏一字一字往外吐
-// 目的不是追求真实 token 节奏，而是先保证人眼明确看出它在打字。
-function getStreamChunkDelay(piece = '') {
-  if (!piece) return 48
-  if (piece === '\n') return 120
-  if (/[。！？!?；;]/.test(piece)) return 150
-  if (/[，,：:]/.test(piece)) return 110
-  return 52
+// 流式显示的目标不是“单字打字机”，而是“像人在连续往外说短语”。
+// 所以这里按片段类型控制停顿：
+// - 普通短语更快
+// - 逗号/顿号这类中停顿稍慢
+// - 句号/换段这种强停顿更明显
+function getStreamChunkDelay(piece = '', queueLength = 0) {
+  if (!piece) return 28
+
+  const trimmed = String(piece).trim()
+  if (!trimmed) return queueLength > 16 ? 0 : 18
+  if (/\n\s*$/.test(piece)) return queueLength > 16 ? 48 : 90
+  if (/[。！？!?]$/.test(trimmed)) return queueLength > 16 ? 52 : 120
+  if (/[；;：:]$/.test(trimmed)) return queueLength > 16 ? 42 : 84
+  if (/[，、,]$/.test(trimmed)) return queueLength > 16 ? 32 : 62
+  return queueLength > 16 ? 12 : 26
 }
 
-// 上游 delta 统一先拆成单字，再交给前端打字机层慢慢吐。
+// 把上游 delta 拆成“更像人类阅读节奏”的短语片段：
+// - 先保留换行/句号这类强边界
+// - 再按逗号、顿号、分号切
+// - 最后对过长片段兜底切短，避免一口气塞太多
 function splitForDisplay(text = '') {
   const normalized = String(text || '')
   if (!normalized) return []
-  return Array.from(normalized)
+
+  const strongSegments = normalized
+    .replace(/\r\n/g, '\n')
+    .split(/(?<=[\n。！？!?])/u)
+    .filter(Boolean)
+
+  const pieces = []
+
+  for (const segment of strongSegments) {
+    const midSegments = segment.split(/(?<=[，、；：,;:])/u).filter(Boolean)
+    for (const mid of midSegments) {
+      if (mid.length <= 8) {
+        pieces.push(mid)
+        continue
+      }
+
+      const chars = Array.from(mid)
+      let buffer = ''
+      for (const char of chars) {
+        buffer += char
+        if (buffer.length >= 6) {
+          pieces.push(buffer)
+          buffer = ''
+        }
+      }
+      if (buffer) pieces.push(buffer)
+    }
+  }
+
+  return pieces.filter(Boolean)
 }
 
 function takeVisibleBatch(queue) {
   if (!queue.length) return ''
-  return queue.shift() || ''
+
+  let batch = queue.shift() || ''
+  const next = queue[0] || ''
+  if (!next) return batch
+
+  const current = batch.trim()
+  const lookahead = next.trim()
+  const canMerge =
+    batch.length + next.length <= 12 &&
+    !/[\n。！？!?]$/.test(current) &&
+    !/^[\n]/.test(next) &&
+    !/[，、；：,;:]$/.test(current) &&
+    !/^[，、；：,;:]/.test(lookahead)
+
+  if (canMerge) {
+    batch += queue.shift() || ''
+  }
+
+  return batch
 }
 
 // 真正把 queue 里的流式文本刷到 UI 的地方。
-// 这里已经不再追求“贴近真实到达速度”，而是强制走可见打字机：
-// 每次只吐一个字符，并按字符类型决定停顿时长。
+// 这里走的是“短语流”：每次吐一小段，不追求逐字，更强调自然阅读节奏。
 async function pumpStreamQueue(assistantMessage, queue, state) {
   if (state.running) return
   state.running = true
@@ -781,7 +855,7 @@ async function pumpStreamQueue(assistantMessage, queue, state) {
     if (!batch) continue
 
     const now = Date.now()
-    const delay = getStreamChunkDelay(batch)
+    const delay = getStreamChunkDelay(batch, queue.length)
     const elapsed = state.lastFlushAt ? now - state.lastFlushAt : delay
     if (elapsed < delay) {
       await new Promise(resolve => setTimeout(resolve, delay - elapsed))
