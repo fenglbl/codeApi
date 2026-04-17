@@ -139,7 +139,7 @@
               <button type="button" class="action-link chat-inline-action" @click="removePendingImage(image.id)">移除</button>
             </div>
             <div class="cell-sub">
-              {{ image.uploadState === 'uploading' ? '上传中…' : image.uploadState === 'error' ? '上传失败' : '已上传' }}
+              {{ !imageUploadEnabled ? '本次将转 base64 直接发送' : image.uploadState === 'uploading' ? '上传中…' : image.uploadState === 'error' ? '上传失败' : '已上传' }}
             </div>
           </div>
         </div>
@@ -218,6 +218,16 @@
               <span class="mini-tag">最多 5 次</span>
             </div>
           </div>
+
+          <div class="chat-settings-card">
+            <div class="chat-settings-card-head">
+              <div>
+                <div class="chat-settings-card-title">图片上传模式</div>
+                <div class="chat-settings-card-desc">默认关闭：直接用 base64 发图，不上传。开启后：先传 MinIO，再把远程地址发给模型。</div>
+              </div>
+              <el-switch v-model="imageUploadEnabled" active-text="上传并使用 URL" inactive-text="直接 base64" />
+            </div>
+          </div>
         </div>
 
       </div>
@@ -280,6 +290,7 @@ const draft = ref('')
 const draftSourceLabel = ref('')
 const streamMode = ref(true)
 const retryCount = ref(3)
+const imageUploadEnabled = ref(false)
 const settingsVisible = ref(false)
 const sending = ref(false)
 const errorState = ref(null)
@@ -355,9 +366,9 @@ const composerHint = computed(() => {
   if (!selectedLocalKeyId.value) return '先选本地 Key；系统提示词和重试次数在左上角设置里。'
   if (!model.value.trim()) return 'Key 已选好，再挑一个模型就能发。'
   if (hasImageDraft.value && !modelSupportsImage.value) return '当前模型大概率不支持图片输入，换个视觉模型再发。'
-  if (hasImageDraft.value && !draft.value.trim()) return `本次将发送 ${pendingImages.value.length} 张图片。`
-  if (hasImageDraft.value) return `本次将发送 ${pendingImages.value.length} 张图片和文本。`
-  return '系统提示词在左上角设置里；支持选择图片，也支持直接粘贴截图。'
+  if (hasImageDraft.value && !draft.value.trim()) return imageUploadEnabled.value ? `本次将发送 ${pendingImages.value.length} 张图片（上传 URL 模式）。` : `本次将发送 ${pendingImages.value.length} 张图片（base64 直发模式）。`
+  if (hasImageDraft.value) return imageUploadEnabled.value ? `本次将发送 ${pendingImages.value.length} 张图片和文本（上传 URL 模式）。` : `本次将发送 ${pendingImages.value.length} 张图片和文本（base64 直发模式）。`
+  return imageUploadEnabled.value ? '系统提示词在左上角设置里；当前图片会先上传，再把 URL 发给模型。' : '系统提示词在左上角设置里；当前图片默认不上传，直接走 base64 发送。'
 })
 
 const chatShellVars = computed(() => {
@@ -397,7 +408,7 @@ watch(draft, (value) => {
 })
 
 // 只要聊天记录、系统提示词、流式开关、key/model、重试次数变化，就写回 localStorage。
-watch([history, systemPrompt, streamMode, selectedLocalKeyId, model, retryCount], () => {
+watch([history, systemPrompt, streamMode, selectedLocalKeyId, model, retryCount, imageUploadEnabled], () => {
   persistState()
 }, { deep: true })
 
@@ -463,7 +474,8 @@ function persistState() {
     modelByLocalKey: nextModelByLocalKey,
     systemPrompt: systemPrompt.value,
     streamMode: streamMode.value,
-    retryCount: retryCount.value
+    retryCount: retryCount.value,
+    imageUploadEnabled: imageUploadEnabled.value
   }))
 }
 
@@ -487,6 +499,7 @@ function restoreState() {
   systemPrompt.value = savedSettings.systemPrompt || DEFAULT_SYSTEM_PROMPT
   streamMode.value = savedSettings.streamMode !== undefined ? !!savedSettings.streamMode : true
   retryCount.value = Number.isFinite(Number(savedSettings.retryCount)) ? Math.max(0, Math.min(5, Number(savedSettings.retryCount))) : 3
+  imageUploadEnabled.value = savedSettings.imageUploadEnabled !== undefined ? !!savedSettings.imageUploadEnabled : false
 }
 
 function createMessage(role, content, extra = {}) {
@@ -700,6 +713,15 @@ function canvasToBlob(canvas, mimeType, quality) {
   })
 }
 
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
 async function compressImageFile(file) {
   const sourceUrl = URL.createObjectURL(file)
   try {
@@ -717,9 +739,11 @@ async function compressImageFile(file) {
     const quality = mimeType === 'image/png' ? undefined : 0.86
     const blob = await canvasToBlob(canvas, mimeType, quality)
     const previewUrl = URL.createObjectURL(blob)
+    const dataUrl = await blobToDataUrl(blob)
     return {
       blob,
       previewUrl,
+      dataUrl,
       mimeType,
       width,
       height
@@ -736,7 +760,7 @@ async function addPendingImage(file) {
     return
   }
 
-  const { blob, previewUrl, mimeType, width, height } = await compressImageFile(file)
+  const { blob, previewUrl, dataUrl, mimeType, width, height } = await compressImageFile(file)
   const imageId = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`
   pendingImages.value.push({
     id: imageId,
@@ -745,10 +769,15 @@ async function addPendingImage(file) {
     width,
     height,
     previewUrl,
-    uploadState: 'uploading',
+    dataUrl,
+    uploadState: imageUploadEnabled.value ? 'uploading' : 'idle',
     remoteUrl: '',
     objectKey: ''
   })
+
+  if (!imageUploadEnabled.value) {
+    return
+  }
 
   const formData = new FormData()
   formData.append('file', blob, file.name)
@@ -795,10 +824,14 @@ function buildUserMessageContent() {
   if (draft.value.trim()) {
     parts.push({ type: 'text', text: draft.value.trim() })
   }
-  for (const image of pendingImages.value.filter(item => item.uploadState === 'done' && item.remoteUrl)) {
+  const readyImages = imageUploadEnabled.value
+    ? pendingImages.value.filter(item => item.uploadState === 'done' && item.remoteUrl)
+    : pendingImages.value.filter(item => item.dataUrl)
+
+  for (const image of readyImages) {
     parts.push({
       type: 'image_url',
-      image_url: { url: image.remoteUrl },
+      image_url: { url: imageUploadEnabled.value ? image.remoteUrl : image.dataUrl },
       name: image.name,
       mimeType: image.mimeType,
       id: image.id,
@@ -967,10 +1000,11 @@ function buildErrorState(err, fallbackPrompt = '') {
   }
 
   const status = Number(err?.status || 0)
+  const preferredDetail = err?.data?.detail || err?.data?.error?.message || err?.data?.message || err?.message || '请求失败'
   const rawDetail = typeof err?.data === 'string'
     ? err.data
-    : JSON.stringify(err?.data || { message: err?.message || '请求失败' }, null, 2)
-  const lowered = String(rawDetail || '').toLowerCase()
+    : JSON.stringify(err?.data || { message: preferredDetail }, null, 2)
+  const lowered = String(rawDetail || preferredDetail || '').toLowerCase()
 
   if (status === 413 || lowered.includes('request entity too large') || lowered.includes('payload too large')) {
     return {
@@ -1285,8 +1319,8 @@ async function sendMessage() {
   if (!requestLocalKeyId) return ElMessage.warning('先选一个本地 Key')
   if (!requestModel) return ElMessage.warning('先填模型')
   if (!requestDraft && !pendingImages.value.length) return ElMessage.warning('先输入消息或选择图片')
-  if (pendingImages.value.some(item => item.uploadState === 'uploading')) return ElMessage.warning('图片还在上传，等一下再发')
-  if (pendingImages.value.some(item => item.uploadState === 'error')) return ElMessage.warning('有图片上传失败了，移除或重新选择后再发')
+  if (imageUploadEnabled.value && pendingImages.value.some(item => item.uploadState === 'uploading')) return ElMessage.warning('图片还在上传，等一下再发')
+  if (imageUploadEnabled.value && pendingImages.value.some(item => item.uploadState === 'error')) return ElMessage.warning('有图片上传失败了，移除或重新选择后再发')
   if (pendingImages.value.length && !modelSupportsImage.value) return ElMessage.warning('当前模型大概率不支持图片输入，换个视觉模型再试')
 
   sending.value = true
@@ -1433,6 +1467,15 @@ onActivated(async () => {
   requestAnimationFrame(() => {
     scrollToBottom()
   })
+})
+
+watch(imageUploadEnabled, (enabled, previous) => {
+  if (enabled === previous || !pendingImages.value.length) return
+  if (enabled) {
+    ElMessage.info('图片上传模式已开启：之后新选择的图片会先上传再发送 URL。当前已选图片仍按当前状态保留。')
+  } else {
+    ElMessage.info('图片上传模式已关闭：之后新选择的图片会直接走 base64 发送，不再上传。')
+  }
 })
 
 onUnmounted(() => {
