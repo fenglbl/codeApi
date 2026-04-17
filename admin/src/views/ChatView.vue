@@ -30,6 +30,9 @@
               <span class="state-chip">{{ streamMode ? '流式输出' : '非流输出' }}</span>
               <span v-if="sending" class="state-chip is-warning">生成中</span>
               <span v-if="hasExternalDraftContext" class="state-chip is-success">{{ draftSourceLabel }}</span>
+              <span v-if="hasImageDraft" class="state-chip" :class="modelSupportsImage ? 'is-success' : 'is-danger'">
+                {{ modelSupportsImage ? '图片输入已启用' : '当前模型疑似不支持图片' }}
+              </span>
             </div>
 
             <div class="chat-toolbar-right">
@@ -312,7 +315,29 @@ const suggestedModels = computed(() => {
 
 const hasExternalDraftContext = computed(() => Boolean(draftSourceLabel.value))
 
-const canSend = computed(() => Boolean(selectedLocalKeyId.value && model.value.trim() && (draft.value.trim() || pendingImages.value.length)) && !sending.value)
+const modelSupportsImage = computed(() => {
+  const value = String(model.value || '').trim().toLowerCase()
+  if (!value) return false
+  return [
+    'gpt-4o',
+    'gpt-4.1',
+    'gpt-5',
+    'claude',
+    'gemini',
+    'vision',
+    'vl',
+    'qwen-vl',
+    'llava',
+    'glm-4v',
+    'pixtral'
+  ].some(keyword => value.includes(keyword))
+})
+
+const canSend = computed(() => {
+  const hasInput = Boolean(draft.value.trim() || pendingImages.value.length)
+  const imageReady = !pendingImages.value.length || modelSupportsImage.value
+  return Boolean(selectedLocalKeyId.value && model.value.trim() && hasInput && imageReady) && !sending.value
+})
 
 const hasImageDraft = computed(() => pendingImages.value.length > 0)
 
@@ -326,6 +351,7 @@ const composerHint = computed(() => {
   if (sending.value) return '正在生成中，可以继续看输出，也可以随时点停止。'
   if (!selectedLocalKeyId.value) return '先选本地 Key；系统提示词和重试次数在左上角设置里。'
   if (!model.value.trim()) return 'Key 已选好，再挑一个模型就能发。'
+  if (hasImageDraft.value && !modelSupportsImage.value) return '当前模型大概率不支持图片输入，换个视觉模型再发。'
   if (hasImageDraft.value && !draft.value.trim()) return `本次将发送 ${pendingImages.value.length} 张图片。`
   if (hasImageDraft.value) return `本次将发送 ${pendingImages.value.length} 张图片和文本。`
   return '系统提示词在左上角设置里；支持选择图片，也支持直接粘贴截图。'
@@ -1216,6 +1242,7 @@ async function sendMessage() {
   if (!requestLocalKeyId) return ElMessage.warning('先选一个本地 Key')
   if (!requestModel) return ElMessage.warning('先填模型')
   if (!requestDraft && !pendingImages.value.length) return ElMessage.warning('先输入消息或选择图片')
+  if (pendingImages.value.length && !modelSupportsImage.value) return ElMessage.warning('当前模型大概率不支持图片输入，换个视觉模型再试')
 
   sending.value = true
   errorState.value = null
