@@ -2118,6 +2118,7 @@ select {
 
 .mapping-workspace-shell {
   margin-top: 14px;
+  margin-bottom: 20px;
   padding: 16px;
   border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, 0.14);
