@@ -2726,6 +2726,47 @@ select {
   background: var(--soft-block-bg);
 }
 
+.chat-toolbar-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.chat-toolbar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.chat-toolbar-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--heading);
+}
+
+.chat-toolbar-desc {
+  margin-top: 6px;
+  max-width: 68ch;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.chat-toolbar-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-toolbar-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .chat-toolbar-left,
 .chat-toolbar-right {
   display: flex;
@@ -3203,12 +3244,17 @@ select {
 
 @media (max-width: 1200px) {
   .chat-toolbar,
+  .chat-toolbar-head,
   .chat-toolbar-left,
   .chat-toolbar-right,
   .chat-composer-actions,
   .topbar-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .chat-toolbar-status-row {
+    justify-content: flex-start;
   }
 
   .chat-toolbar-select,

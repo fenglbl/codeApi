@@ -2,30 +2,48 @@
   <AppLayout title="聊天" subtitle="像正常聊天页一样直接对话，也能顺手验证本地 Key、模型映射和上游响应。">
     <div ref="chatShellRef" class="chat-shell panel" :style="chatShellVars">
       <div class="chat-toolbar">
-        <div class="chat-toolbar-left">
-          <el-select v-model="selectedLocalKeyId" placeholder="选择本地 Key" filterable class="chat-toolbar-select">
-            <el-option
-              v-for="item in enabledLocalKeys"
-              :key="item.id"
-              :label="`${item.name} (${item.keyPrefix || '未命名'})`"
-              :value="item.id"
-            />
-          </el-select>
-          <el-select v-model="model" placeholder="选择模型" filterable allow-create default-first-option class="chat-toolbar-model-select">
-            <el-option
-              v-for="item in suggestedModels"
-              :key="item"
-              :label="item"
-              :value="item"
-            />
-          </el-select>
-        </div>
-        <div class="chat-toolbar-right">
-          <span class="state-chip">{{ streamMode ? '流式输出' : '非流输出' }}</span>
-          <span v-if="sending" class="state-chip is-warning">生成中</span>
-          <el-button v-if="sending" type="danger" plain class="toolbar-danger-btn" @click="stopGeneration">停止生成</el-button>
-          <el-button class="toolbar-ghost-btn" @click="clearHistory" :disabled="sending || !history.length">清空历史</el-button>
-          <el-button class="toolbar-ghost-btn chat-settings-btn" @click="settingsVisible = true">设置</el-button>
+        <div class="chat-toolbar-main">
+          <div class="chat-toolbar-head">
+            <div>
+              <div class="chat-toolbar-title">聊天调试台</div>
+              <div class="chat-toolbar-desc">直接验证本地 Key、模型映射和上游响应，也能承接日志页带过来的问题上下文。</div>
+            </div>
+            <div class="chat-toolbar-right">
+              <span class="state-chip">{{ streamMode ? '流式输出' : '非流输出' }}</span>
+              <span v-if="sending" class="state-chip is-warning">生成中</span>
+              <span v-if="hasExternalDraftContext" class="state-chip is-success">{{ draftSourceLabel }}</span>
+              <el-button v-if="sending" type="danger" plain class="toolbar-danger-btn" @click="stopGeneration">停止生成</el-button>
+              <el-button class="toolbar-ghost-btn" @click="clearHistory" :disabled="sending || !history.length">清空历史</el-button>
+              <el-button class="toolbar-ghost-btn chat-settings-btn" @click="settingsVisible = true">设置</el-button>
+            </div>
+          </div>
+
+          <div class="chat-toolbar-controls">
+            <div class="chat-toolbar-left">
+              <el-select v-model="selectedLocalKeyId" placeholder="选择本地 Key" filterable class="chat-toolbar-select">
+                <el-option
+                  v-for="item in enabledLocalKeys"
+                  :key="item.id"
+                  :label="`${item.name} (${item.keyPrefix || '未命名'})`"
+                  :value="item.id"
+                />
+              </el-select>
+              <el-select v-model="model" placeholder="选择模型" filterable allow-create default-first-option class="chat-toolbar-model-select">
+                <el-option
+                  v-for="item in suggestedModels"
+                  :key="item"
+                  :label="item"
+                  :value="item"
+                />
+              </el-select>
+            </div>
+
+            <div class="chat-toolbar-status-row">
+              <span class="mini-tag">{{ selectedLocalKey ? `Key：${selectedLocalKey.name}` : '先选本地 Key' }}</span>
+              <span class="mini-tag">{{ model ? `模型：${model}` : '先选模型' }}</span>
+              <span class="mini-tag">{{ currentRouteLabel }}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -237,7 +255,7 @@ const selectedLocalKeyId = ref('')
 const model = ref('')
 const modelByLocalKey = ref({})
 const systemPrompt = ref(DEFAULT_SYSTEM_PROMPT)
-const draft = ref('')
+const draftSourceLabel = ref('')
 const streamMode = ref(true)
 const retryCount = ref(3)
 const settingsVisible = ref(false)
@@ -274,7 +292,13 @@ const suggestedModels = computed(() => {
   return [...new Set([...mappedLocalModels, ...mappedUpstreamModels, ...upstreamModels])].slice(0, 16)
 })
 
-const canSend = computed(() => Boolean(selectedLocalKeyId.value && model.value.trim() && draft.value.trim()) && !sending.value)
+const hasExternalDraftContext = computed(() => Boolean(draftSourceLabel.value))
+const currentRouteLabel = computed(() => {
+  if (!selectedLocalKey.value) return '未选本地 Key'
+  const defaultUpstream = selectedLocalKey.value.defaultUpstreamId?.name
+  if (defaultUpstream) return `默认上游：${defaultUpstream}`
+  return `已绑上游 ${selectedLocalKey.value.upstreamBindings?.length || 0} 个`
+})
 
 const composerPlaceholder = computed(() => {
   if (!selectedLocalKeyId.value) return '先选一个本地 Key，再开始聊天。'
@@ -320,15 +344,11 @@ watch(selectedLocalKeyId, async (newId, oldId) => {
   model.value = rememberedModel || fallbackModel
 })
 
-watch(model, (value) => {
-  if (!selectedLocalKeyId.value) return
-  modelByLocalKey.value = {
-    ...modelByLocalKey.value,
-    [selectedLocalKeyId.value]: value
-  }
+watch(draft, (value) => {
+  if (value.trim()) return
+  clearDraftSource()
 })
 
-// 这里是聊天页的本地保存入口。
 // 只要聊天记录、系统提示词、流式开关、key/model、重试次数变化，就写回 localStorage。
 watch([history, systemPrompt, streamMode, selectedLocalKeyId, model, retryCount], () => {
   persistState()
@@ -530,10 +550,12 @@ function canUseAsDraft(item) {
 function useAsDraft(item) {
   if (!item?.content) return
   draft.value = item.content
+  clearDraftSource()
 }
 
 function applyStarter(text) {
   draft.value = text
+  clearDraftSource()
 }
 
 function consumeExternalDraft() {
@@ -547,13 +569,19 @@ function consumeExternalDraft() {
   }
 
   draft.value = payload.text
+  draftSourceLabel.value = payload.source === 'request-log-error' ? '来自请求日志问AI' : '外部草稿'
   localStorage.removeItem(CHAT_EXTERNAL_DRAFT_STORAGE_KEY)
   return true
+}
+
+function clearDraftSource() {
+  draftSourceLabel.value = ''
 }
 
 function retryFromUserMessage(item) {
   if (!item?.content || sending.value) return
   draft.value = item.content
+  clearDraftSource()
   sendMessage()
 }
 
