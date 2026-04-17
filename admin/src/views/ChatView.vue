@@ -682,44 +682,50 @@ function openImagePicker() {
   imageInputRef.value?.click()
 }
 
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
-function loadImageElement(dataUrl) {
+function loadImageElement(objectUrl) {
   return new Promise((resolve, reject) => {
     const image = new Image()
     image.onload = () => resolve(image)
     image.onerror = reject
-    image.src = dataUrl
+    image.src = objectUrl
+  })
+}
+
+function canvasToBlob(canvas, mimeType, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (!blob) return reject(new Error('blob_create_failed'))
+      resolve(blob)
+    }, mimeType, quality)
   })
 }
 
 async function compressImageFile(file) {
-  const dataUrl = await fileToDataUrl(file)
-  const image = await loadImageElement(dataUrl)
-  const maxSide = 1600
-  const scale = Math.min(1, maxSide / Math.max(image.width, image.height))
-  const width = Math.max(1, Math.round(image.width * scale))
-  const height = Math.max(1, Math.round(image.height * scale))
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  ctx.drawImage(image, 0, 0, width, height)
-  const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
-  const quality = mimeType === 'image/png' ? undefined : 0.86
-  const compressedDataUrl = canvas.toDataURL(mimeType, quality)
-  return {
-    dataUrl: compressedDataUrl,
-    mimeType,
-    width,
-    height
+  const sourceUrl = URL.createObjectURL(file)
+  try {
+    const image = await loadImageElement(sourceUrl)
+    const maxSide = 1600
+    const scale = Math.min(1, maxSide / Math.max(image.width, image.height))
+    const width = Math.max(1, Math.round(image.width * scale))
+    const height = Math.max(1, Math.round(image.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(image, 0, 0, width, height)
+    const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+    const quality = mimeType === 'image/png' ? undefined : 0.86
+    const blob = await canvasToBlob(canvas, mimeType, quality)
+    const previewUrl = URL.createObjectURL(blob)
+    return {
+      blob,
+      previewUrl,
+      mimeType,
+      width,
+      height
+    }
+  } finally {
+    URL.revokeObjectURL(sourceUrl)
   }
 }
 
@@ -730,7 +736,7 @@ async function addPendingImage(file) {
     return
   }
 
-  const { dataUrl, mimeType, width, height } = await compressImageFile(file)
+  const { blob, previewUrl, mimeType, width, height } = await compressImageFile(file)
   const imageId = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`
   pendingImages.value.push({
     id: imageId,
@@ -738,14 +744,14 @@ async function addPendingImage(file) {
     mimeType,
     width,
     height,
-    previewUrl: dataUrl,
+    previewUrl,
     uploadState: 'uploading',
     remoteUrl: '',
     objectKey: ''
   })
 
   const formData = new FormData()
-  formData.append('file', file, file.name)
+  formData.append('file', blob, file.name)
 
   try {
     const res = await adminApi.uploadChatImage(formData)
@@ -777,6 +783,10 @@ async function handleImageSelect(event) {
 }
 
 function removePendingImage(imageId) {
+  const target = pendingImages.value.find(item => item.id === imageId)
+  if (target?.previewUrl?.startsWith('blob:')) {
+    URL.revokeObjectURL(target.previewUrl)
+  }
   pendingImages.value = pendingImages.value.filter(item => item.id !== imageId)
 }
 
@@ -863,6 +873,11 @@ async function handleMessageAreaClick(event) {
 }
 
 function clearHistory() {
+  for (const image of pendingImages.value) {
+    if (image?.previewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(image.previewUrl)
+    }
+  }
   history.value = []
   pendingImages.value = []
   errorState.value = null
