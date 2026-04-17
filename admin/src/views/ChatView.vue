@@ -3,12 +3,11 @@
     <div ref="chatShellRef" class="chat-shell panel" :style="chatShellVars">
       <div class="chat-toolbar">
         <div class="chat-toolbar-main">
-          <div class="chat-toolbar-head">
-            <div>
+          <div class="chat-toolbar-head chat-toolbar-head-inline">
+            <div class="chat-toolbar-heading">
               <div class="chat-toolbar-title">聊天调试台</div>
               <div class="chat-toolbar-desc">直接验证本地 Key、模型映射和上游响应，也能承接日志页带过来的问题上下文。</div>
             </div>
-          </div>
 
           <div class="chat-toolbar-controls chat-toolbar-controls-inline">
             <div class="chat-toolbar-left">
@@ -38,6 +37,7 @@
               <el-button class="toolbar-ghost-btn" @click="clearHistory" :disabled="sending || !history.length">清空历史</el-button>
               <el-button class="toolbar-ghost-btn chat-settings-btn" @click="settingsVisible = true">设置</el-button>
             </div>
+          </div>
           </div>
         </div>
       </div>
