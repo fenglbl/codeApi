@@ -1,4 +1,4 @@
-const { proxyOpenAiRequest, finalizeStreamLog } = require('../services/proxy.service');
+const { proxyOpenAiRequest, finalizeStreamLog, extractErrorMessage } = require('../services/proxy.service');
 const LocalApiKey = require('../models/LocalApiKey');
 
 async function touchLocalKey(localApiKey) {
@@ -106,7 +106,7 @@ async function chatCompletions(req, res, next) {
           totalTokens: streamState.totalTokens,
           cacheReadTokens: streamState.cacheReadTokens,
           cacheWriteTokens: streamState.cacheWriteTokens,
-          errorMessage: err?.message || 'stream_error'
+          errorMessage: extractErrorMessage(err)
         }).catch(() => {});
         if (!res.headersSent) return next(err);
         res.destroy(err);
@@ -123,7 +123,16 @@ async function chatCompletions(req, res, next) {
 
     res.status(response.status).json(response.data);
   } catch (err) {
-    if (err.response && !req.body?.stream) return res.status(err.response.status).json(err.response.data);
+    if (err.response) {
+      const detail = err.response.data
+      if (typeof detail === 'object' && detail !== null) {
+        return res.status(err.response.status).json(detail)
+      }
+      return res.status(err.response.status).json({
+        message: err.message || '请求失败',
+        detail: detail
+      })
+    }
     next(err);
   }
 }
