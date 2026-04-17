@@ -145,6 +145,7 @@
           class="chat-composer-input"
           :placeholder="composerPlaceholder"
           @keydown="handleComposerKeydown"
+          @paste="handleComposerKeydown"
         />
         <div class="chat-composer-actions">
           <div class="chat-composer-left muted">
@@ -327,7 +328,7 @@ const composerHint = computed(() => {
   if (!model.value.trim()) return 'Key 已选好，再挑一个模型就能发。'
   if (hasImageDraft.value && !draft.value.trim()) return `本次将发送 ${pendingImages.value.length} 张图片。`
   if (hasImageDraft.value) return `本次将发送 ${pendingImages.value.length} 张图片和文本。`
-  return '系统提示词在左上角设置里；历史会保存在当前浏览器。'
+  return '系统提示词在左上角设置里；支持选择图片，也支持直接粘贴截图。'
 })
 
 const chatShellVars = computed(() => {
@@ -661,25 +662,64 @@ function fileToDataUrl(file) {
   })
 }
 
+function loadImageElement(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = reject
+    image.src = dataUrl
+  })
+}
+
+async function compressImageFile(file) {
+  const dataUrl = await fileToDataUrl(file)
+  const image = await loadImageElement(dataUrl)
+  const maxSide = 1600
+  const scale = Math.min(1, maxSide / Math.max(image.width, image.height))
+  const width = Math.max(1, Math.round(image.width * scale))
+  const height = Math.max(1, Math.round(image.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(image, 0, 0, width, height)
+  const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+  const quality = mimeType === 'image/png' ? undefined : 0.86
+  const compressedDataUrl = canvas.toDataURL(mimeType, quality)
+  return {
+    dataUrl: compressedDataUrl,
+    mimeType,
+    width,
+    height
+  }
+}
+
+async function addPendingImage(file) {
+  if (!file.type.startsWith('image/')) return
+  if (pendingImages.value.length >= 3) {
+    ElMessage.warning('最多先发 3 张图片')
+    return
+  }
+
+  const { dataUrl, mimeType, width, height } = await compressImageFile(file)
+  pendingImages.value.push({
+    id: `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
+    name: file.name,
+    mimeType,
+    width,
+    height,
+    dataUrl
+  })
+}
+
 async function handleImageSelect(event) {
   const files = Array.from(event?.target?.files || [])
   for (const file of files) {
-    if (!file.type.startsWith('image/')) continue
-    if (pendingImages.value.length >= 3) {
-      ElMessage.warning('最多先发 3 张图片')
-      break
+    try {
+      await addPendingImage(file)
+    } catch (_) {
+      ElMessage.warning(`图片「${file.name}」处理失败，换一张试试`)
     }
-    if (file.size > 5 * 1024 * 1024) {
-      ElMessage.warning(`图片「${file.name}」超过 5MB，先压缩再试`)
-      continue
-    }
-    const dataUrl = await fileToDataUrl(file)
-    pendingImages.value.push({
-      id: `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
-      name: file.name,
-      mimeType: file.type,
-      dataUrl
-    })
   }
   if (event?.target) event.target.value = ''
 }
@@ -786,10 +826,28 @@ function updateChatViewportHeight() {
   chatViewportHeight.value = Math.max(520, viewportHeight - rect.top - 24)
 }
 
-function handleComposerKeydown(event) {
+async function handleComposerKeydown(event) {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     sendMessage()
+    return
+  }
+
+  if (event.type === 'paste') {
+    const items = Array.from(event.clipboardData?.items || [])
+    const imageItems = items.filter(item => item.type.startsWith('image/'))
+    if (!imageItems.length) return
+
+    event.preventDefault()
+    for (const item of imageItems) {
+      const file = item.getAsFile()
+      if (!file) continue
+      try {
+        await addPendingImage(file)
+      } catch (_) {
+        ElMessage.warning('粘贴图片失败，换张图再试试')
+      }
+    }
   }
 }
 
