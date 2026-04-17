@@ -2760,11 +2760,11 @@ select {
   gap: 10px;
 }
 
-.chat-toolbar-status-row {
-  display: flex;
+.chat-toolbar-controls-inline {
+  flex-direction: row;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 14px;
 }
 
 .chat-toolbar-left,
@@ -2808,12 +2808,12 @@ select {
 }
 
 .chat-toolbar-select {
-  width: 280px;
+  width: 220px;
   flex-shrink: 0;
 }
 
 .chat-toolbar-model-select {
-  width: 320px;
+  width: 240px;
   flex-shrink: 0;
 }
 
@@ -3245,16 +3245,13 @@ select {
 @media (max-width: 1200px) {
   .chat-toolbar,
   .chat-toolbar-head,
+  .chat-toolbar-controls-inline,
   .chat-toolbar-left,
   .chat-toolbar-right,
   .chat-composer-actions,
   .topbar-actions {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .chat-toolbar-status-row {
-    justify-content: flex-start;
   }
 
   .chat-toolbar-select,

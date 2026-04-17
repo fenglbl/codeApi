@@ -8,17 +8,9 @@
               <div class="chat-toolbar-title">聊天调试台</div>
               <div class="chat-toolbar-desc">直接验证本地 Key、模型映射和上游响应，也能承接日志页带过来的问题上下文。</div>
             </div>
-            <div class="chat-toolbar-right">
-              <span class="state-chip">{{ streamMode ? '流式输出' : '非流输出' }}</span>
-              <span v-if="sending" class="state-chip is-warning">生成中</span>
-              <span v-if="hasExternalDraftContext" class="state-chip is-success">{{ draftSourceLabel }}</span>
-              <el-button v-if="sending" type="danger" plain class="toolbar-danger-btn" @click="stopGeneration">停止生成</el-button>
-              <el-button class="toolbar-ghost-btn" @click="clearHistory" :disabled="sending || !history.length">清空历史</el-button>
-              <el-button class="toolbar-ghost-btn chat-settings-btn" @click="settingsVisible = true">设置</el-button>
-            </div>
           </div>
 
-          <div class="chat-toolbar-controls">
+          <div class="chat-toolbar-controls chat-toolbar-controls-inline">
             <div class="chat-toolbar-left">
               <el-select v-model="selectedLocalKeyId" placeholder="选择本地 Key" filterable class="chat-toolbar-select">
                 <el-option
@@ -36,12 +28,15 @@
                   :value="item"
                 />
               </el-select>
+              <span class="state-chip">{{ streamMode ? '流式输出' : '非流输出' }}</span>
+              <span v-if="sending" class="state-chip is-warning">生成中</span>
+              <span v-if="hasExternalDraftContext" class="state-chip is-success">{{ draftSourceLabel }}</span>
             </div>
 
-            <div class="chat-toolbar-status-row">
-              <span class="mini-tag">{{ selectedLocalKey ? `Key：${selectedLocalKey.name}` : '先选本地 Key' }}</span>
-              <span class="mini-tag">{{ model ? `模型：${model}` : '先选模型' }}</span>
-              <span class="mini-tag">{{ currentRouteLabel }}</span>
+            <div class="chat-toolbar-right">
+              <el-button v-if="sending" type="danger" plain class="toolbar-danger-btn" @click="stopGeneration">停止生成</el-button>
+              <el-button class="toolbar-ghost-btn" @click="clearHistory" :disabled="sending || !history.length">清空历史</el-button>
+              <el-button class="toolbar-ghost-btn chat-settings-btn" @click="settingsVisible = true">设置</el-button>
             </div>
           </div>
         </div>
@@ -294,12 +289,6 @@ const suggestedModels = computed(() => {
 })
 
 const hasExternalDraftContext = computed(() => Boolean(draftSourceLabel.value))
-const currentRouteLabel = computed(() => {
-  if (!selectedLocalKey.value) return '未选本地 Key'
-  const defaultUpstream = selectedLocalKey.value.defaultUpstreamId?.name
-  if (defaultUpstream) return `默认上游：${defaultUpstream}`
-  return `已绑上游 ${selectedLocalKey.value.upstreamBindings?.length || 0} 个`
-})
 
 const composerPlaceholder = computed(() => {
   if (!selectedLocalKeyId.value) return '先选一个本地 Key，再开始聊天。'
