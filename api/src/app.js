@@ -9,6 +9,7 @@ const adminAuthRoutes = require('./routes/admin.auth.routes');
 const adminUpstreamRoutes = require('./routes/admin.upstream.routes');
 const adminLocalKeyRoutes = require('./routes/admin.local-key.routes');
 const adminRequestLogRoutes = require('./routes/admin.request-log.routes');
+const adminUploadRoutes = require('./routes/admin.upload.routes');
 const v1Routes = require('./routes/v1.routes');
 const errorHandler = require('./middlewares/error.middleware');
 const env = require('./config/env');
@@ -25,6 +26,7 @@ app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/admin/upstreams', adminUpstreamRoutes);
 app.use('/api/admin/local-keys', adminLocalKeyRoutes);
 app.use('/api/admin/request-logs', adminRequestLogRoutes);
+app.use('/api/admin/uploads', adminUploadRoutes);
 app.use('/v1', v1Routes);
 
 const adminDistDir = path.join(__dirname, '..', '..', 'admin', 'dist');
