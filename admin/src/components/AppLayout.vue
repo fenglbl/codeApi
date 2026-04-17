@@ -21,11 +21,20 @@
           <div class="topbar-subtitle">{{ subtitle }}</div>
         </div>
         <div class="topbar-actions">
-          <el-select v-model="themePreference" class="theme-switcher" size="small" @change="setThemePreference">
-            <el-option label="跟随系统" value="system" />
-            <el-option label="浅色模式" value="light" />
-            <el-option label="深色模式" value="dark" />
-          </el-select>
+          <div class="theme-icon-switch" role="group" aria-label="主题模式">
+            <button
+              v-for="item in themeOptions"
+              :key="item.value"
+              type="button"
+              class="theme-icon-btn"
+              :class="themePreference === item.value ? 'is-active' : ''"
+              :title="item.label"
+              :aria-label="item.label"
+              @click="setThemePreference(item.value)"
+            >
+              <span>{{ item.icon }}</span>
+            </button>
+          </div>
           <span class="mini-tag topbar-theme-tag">{{ themeLabel }}</span>
           <el-button type="danger" plain class="toolbar-danger-btn" @click="logout">退出</el-button>
         </div>
@@ -48,6 +57,11 @@ defineProps({
 const router = useRouter()
 const auth = useAuthStore()
 const { themePreference, themeLabel, setThemePreference } = useTheme()
+const themeOptions = [
+  { value: 'system', label: '跟随系统', icon: '◐' },
+  { value: 'light', label: '浅色模式', icon: '☀' },
+  { value: 'dark', label: '深色模式', icon: '☾' }
+]
 
 function logout() {
   auth.logout()

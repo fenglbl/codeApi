@@ -446,27 +446,40 @@ select {
   min-height: 26px;
 }
 
-.theme-switcher {
-  width: 120px;
-  flex: 0 0 auto;
-}
-
-.theme-switcher .el-input__wrapper {
+.theme-icon-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
   background: var(--panel-soft);
-  border-radius: 12px;
-  box-shadow: 0 0 0 1px var(--border) inset !important;
-  transition: box-shadow 0.18s ease, background 0.18s ease;
 }
 
-.theme-switcher .el-input__wrapper:hover,
-.theme-switcher .el-input__wrapper.is-focus {
-  background: var(--panel);
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.28) inset !important;
+.theme-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.18s ease;
 }
 
-.theme-switcher .el-input__inner {
-  color: var(--text);
-  font-weight: 600;
+.theme-icon-btn:hover {
+  color: var(--primary);
+  background: rgba(37, 99, 235, 0.10);
+}
+
+.theme-icon-btn.is-active {
+  color: var(--primary);
+  background: rgba(37, 99, 235, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.18);
 }
 
 .panel {
@@ -1272,6 +1285,10 @@ select {
 :root[data-theme='light'] .auth-side-eyebrow,
 :root[data-theme='light'] .chat-empty-badge {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.72) inset;
+}
+
+:root[data-theme='light'] .theme-icon-switch {
+  background: rgba(255, 255, 255, 0.92);
 }
 
 :root[data-theme='light'] .theme-switcher .el-input__wrapper:hover,
