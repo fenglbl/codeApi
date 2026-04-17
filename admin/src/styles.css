@@ -3536,6 +3536,15 @@ select {
   margin-bottom: 14px;
 }
 
+.chat-settings-card-head-stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.chat-settings-card-head-stack .el-switch {
+  align-self: flex-start;
+}
+
 .chat-settings-card-title {
   font-size: 14px;
   font-weight: 800;

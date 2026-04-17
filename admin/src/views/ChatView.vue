@@ -197,7 +197,7 @@
 
         <div class="chat-settings-grid">
           <div class="chat-settings-card">
-            <div class="chat-settings-card-head">
+            <div class="chat-settings-card-head chat-settings-card-head-stack">
               <div>
                 <div class="chat-settings-card-title">输出模式</div>
                 <div class="chat-settings-card-desc">流式更像实时对话；非流式更稳定，适合对比完整结果。</div>
@@ -220,7 +220,7 @@
           </div>
 
           <div class="chat-settings-card">
-            <div class="chat-settings-card-head">
+            <div class="chat-settings-card-head chat-settings-card-head-stack">
               <div>
                 <div class="chat-settings-card-title">图片上传模式</div>
                 <div class="chat-settings-card-desc">默认关闭：直接用 base64 发图，不上传。开启后：先传 MinIO，再把远程地址发给模型。</div>
