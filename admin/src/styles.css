@@ -2124,10 +2124,6 @@ select {
   background: var(--subtle-block-bg);
 }
 
-.mapping-workspace-shell.no-top-margin {
-  margin-top: 0;
-}
-
 .mapping-workspace-body {
   display: grid;
   gap: 14px;

@@ -149,8 +149,7 @@
           </div>
         </div>
 
-        <div class="form-block">
-          <div class="mapping-workspace-shell no-top-margin">
+        <div class="mapping-workspace-shell">
             <div class="mapping-suggest-head">
               <div>
                 <div class="form-block-title no-margin">当前映射上游</div>
@@ -222,7 +221,6 @@
                 <div class="field-hint">只有本地模型名和上游模型名都填了，保存时才会记进当前上游名下。</div>
               </div>
             </div>
-          </div>
         </div>
 
         <div class="form-block form-block-inline">
