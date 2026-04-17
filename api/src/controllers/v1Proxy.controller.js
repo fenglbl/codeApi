@@ -1,6 +1,40 @@
 const { proxyOpenAiRequest, finalizeStreamLog, extractErrorMessage } = require('../services/proxy.service');
 const LocalApiKey = require('../models/LocalApiKey');
 
+function buildSafeErrorBody(err) {
+  const detail = err?.response?.data
+  const message = extractErrorMessage(err)
+
+  if (typeof detail === 'string') {
+    return {
+      message,
+      detail: detail.slice(0, 4000)
+    }
+  }
+
+  if (Buffer.isBuffer(detail)) {
+    const text = detail.toString('utf8').slice(0, 4000)
+    return {
+      message,
+      detail: text
+    }
+  }
+
+  if (detail && typeof detail === 'object') {
+    const safe = {}
+    if (detail.error && typeof detail.error === 'object') {
+      if (detail.error.message) safe.error = { message: String(detail.error.message).slice(0, 4000) }
+      else if (detail.error.code) safe.error = { code: detail.error.code }
+    }
+    if (detail.message) safe.detail = String(detail.message).slice(0, 4000)
+    if (!Object.keys(safe).length) safe.detail = message
+    if (!safe.message) safe.message = message
+    return safe
+  }
+
+  return { message }
+}
+
 async function touchLocalKey(localApiKey) {
   await LocalApiKey.findByIdAndUpdate(localApiKey._id, {
     $inc: { usageCount: 1 },
@@ -124,14 +158,7 @@ async function chatCompletions(req, res, next) {
     res.status(response.status).json(response.data);
   } catch (err) {
     if (err.response) {
-      const detail = err.response.data
-      if (typeof detail === 'object' && detail !== null) {
-        return res.status(err.response.status).json(detail)
-      }
-      return res.status(err.response.status).json({
-        message: err.message || '请求失败',
-        detail: detail
-      })
+      return res.status(err.response.status).json(buildSafeErrorBody(err))
     }
     next(err);
   }
@@ -143,7 +170,7 @@ async function embeddings(req, res, next) {
     await touchLocalKey(req.localApiKey);
     res.status(response.status).json(response.data);
   } catch (err) {
-    if (err.response) return res.status(err.response.status).json(err.response.data);
+    if (err.response) return res.status(err.response.status).json(buildSafeErrorBody(err));
     next(err);
   }
 }
