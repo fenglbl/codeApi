@@ -1,13 +1,34 @@
 <template>
   <div class="page-shell">
     <aside class="sidebar">
-      <div class="sidebar-logo">CodeAip<div class="sidebar-sub">Local OpenAI Gateway</div></div>
-      <el-menu router :default-active="$route.path" background-color="transparent">
-        <el-menu-item index="/dashboard">概览</el-menu-item>
-        <el-menu-item index="/chat">聊天</el-menu-item>
-        <el-menu-item index="/upstreams">上游管理</el-menu-item>
-        <el-menu-item index="/local-keys">本地 Keys</el-menu-item>
-        <el-menu-item index="/request-logs">请求日志</el-menu-item>
+      <div class="sidebar-brand-card">
+        <div class="sidebar-brand-head">
+          <div class="sidebar-logo">CodeAip</div>
+          <span class="mini-tag sidebar-brand-tag">Admin</span>
+        </div>
+        <div class="sidebar-sub">Local OpenAI Gateway</div>
+      </div>
+      <el-menu router :default-active="$route.path" background-color="transparent" class="sidebar-menu">
+        <el-menu-item index="/dashboard">
+          <span class="sidebar-menu-icon">📊</span>
+          <span>概览</span>
+        </el-menu-item>
+        <el-menu-item index="/chat">
+          <span class="sidebar-menu-icon">💬</span>
+          <span>聊天</span>
+        </el-menu-item>
+        <el-menu-item index="/upstreams">
+          <span class="sidebar-menu-icon">🔌</span>
+          <span>上游管理</span>
+        </el-menu-item>
+        <el-menu-item index="/local-keys">
+          <span class="sidebar-menu-icon">🔑</span>
+          <span>本地 Keys</span>
+        </el-menu-item>
+        <el-menu-item index="/request-logs">
+          <span class="sidebar-menu-icon">🪵</span>
+          <span>请求日志</span>
+        </el-menu-item>
       </el-menu>
     </aside>
     <main class="main-area">
