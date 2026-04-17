@@ -60,23 +60,30 @@
                 <button v-if="item.role === 'user'" type="button" class="action-link chat-inline-action" @click="retryFromUserMessage(item)">重新发送</button>
                 <button v-if="canUseAsDraft(item)" type="button" class="action-link chat-inline-action" @click="useAsDraft(item)">放到输入框</button>
               </div>
+              <div v-if="getMessageImages(item.content).length" class="chat-image-grid">
+                <div v-for="image in getMessageImages(item.content)" :key="image.id || image.url" class="chat-image-card">
+                  <img v-if="image.url" :src="image.url" :alt="image.name || '图片附件'" class="chat-image-preview" />
+                  <div v-else class="chat-image-stub">图片未恢复</div>
+                  <div class="chat-image-name">{{ image.name || '图片附件' }}</div>
+                </div>
+              </div>
               <div
                 v-if="shouldRenderPendingPlain(item)"
                 :key="`pending-${item.id}-${item.renderTick || 0}`"
                 class="chat-bubble-text chat-bubble-text-live"
-                :class="{ 'is-thinking': item.role === 'assistant' && item.pending && !item.content }"
-              >{{ item.content || (item.role === 'assistant' && item.pending ? '正在生成...' : '...') }}</div>
+                :class="{ 'is-thinking': item.role === 'assistant' && item.pending && !getMessageText(item.content) }"
+              >{{ getMessageText(item.content) || (item.role === 'assistant' && item.pending ? '正在生成...' : '...') }}</div>
               <div
                 v-else-if="shouldRenderMarkdown(item)"
                 class="chat-bubble-text chat-markdown"
-                :class="{ 'is-thinking': item.role === 'assistant' && item.pending && !item.content }"
-                v-html="renderMarkdown(item.content || (item.role === 'assistant' && item.pending ? '正在生成...' : '...'))"
+                :class="{ 'is-thinking': item.role === 'assistant' && item.pending && !getMessageText(item.content) }"
+                v-html="renderMarkdown(getMessageText(item.content) || (item.role === 'assistant' && item.pending ? '正在生成...' : '...'))"
               ></div>
               <div
-                v-else
+                v-else-if="getMessageText(item.content)"
                 class="chat-bubble-text"
-                :class="{ 'is-thinking': item.role === 'assistant' && item.pending && !item.content }"
-              >{{ item.content || (item.role === 'assistant' && item.pending ? '正在生成...' : '...') }}</div>
+                :class="{ 'is-thinking': item.role === 'assistant' && item.pending && !getMessageText(item.content) }"
+              >{{ getMessageText(item.content) || (item.role === 'assistant' && item.pending ? '正在生成...' : '...') }}</div>
               <div v-if="item.statusCode || item.usage || item.role === 'assistant'" class="chat-bubble-foot">
                 <span v-if="item.pending" class="mini-tag">生成中</span>
                 <span v-if="item.statusCode" class="mini-tag">状态 {{ item.statusCode }}</span>
@@ -120,6 +127,16 @@
       </div>
 
       <div class="chat-composer">
+        <input ref="imageInputRef" type="file" accept="image/*" multiple class="chat-file-input" @change="handleImageSelect" />
+        <div v-if="pendingImages.length" class="chat-composer-images">
+          <div v-for="image in pendingImages" :key="image.id" class="chat-composer-image-card">
+            <img :src="image.dataUrl" :alt="image.name" class="chat-composer-image-preview" />
+            <div class="chat-composer-image-meta">
+              <span class="chat-composer-image-name">{{ image.name }}</span>
+              <button type="button" class="action-link chat-inline-action" @click="removePendingImage(image.id)">移除</button>
+            </div>
+          </div>
+        </div>
         <el-input
           v-model="draft"
           type="textarea"
@@ -133,8 +150,10 @@
           <div class="chat-composer-left muted">
             <span>{{ composerHint }}</span>
             <span class="chat-composer-count">{{ draft.length }} 字</span>
+            <span v-if="pendingImages.length" class="chat-composer-count">已附 {{ pendingImages.length }} 张图</span>
           </div>
           <div class="chat-composer-right">
+            <el-button class="toolbar-ghost-btn" :disabled="sending" @click="openImagePicker">图片</el-button>
             <el-button v-if="sending" type="danger" plain class="toolbar-danger-btn" @click="stopGeneration">停止</el-button>
             <el-button type="primary" class="toolbar-primary-btn" :loading="sending" :disabled="!canSend" @click="sendMessage">发送</el-button>
           </div>
@@ -261,6 +280,8 @@ const rawKeyCache = ref({})
 const history = ref([])
 const messagesRef = ref(null)
 const chatShellRef = ref(null)
+const imageInputRef = ref(null)
+const pendingImages = ref([])
 const activeAbortController = ref(null)
 const stopRequested = ref(false)
 const chatViewportHeight = ref(0)
@@ -344,6 +365,28 @@ watch([history, systemPrompt, streamMode, selectedLocalKeyId, model, retryCount]
   persistState()
 }, { deep: true })
 
+function simplifyMessageContentForStorage(content) {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return content
+  return content.map(item => {
+    if (item?.type === 'text') return { type: 'text', text: item.text || '' }
+    if (item?.type === 'image_url') {
+      return {
+        type: 'image_stub',
+        name: item.name || '图片附件',
+        mimeType: item.mimeType || 'image/*'
+      }
+    }
+    return item
+  })
+}
+
+function restoreStoredMessageContent(content) {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return content
+  return content
+}
+
 async function ensureRawKey(localKeyId) {
   if (rawKeyCache.value[localKeyId]) return rawKeyCache.value[localKeyId]
   const res = await adminApi.getLocalKeyRawKey(localKeyId)
@@ -372,7 +415,12 @@ function persistState() {
       }
     : modelByLocalKey.value
 
-  localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(history.value.slice(-80)))
+  localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(
+    history.value.slice(-80).map(item => ({
+      ...item,
+      content: simplifyMessageContentForStorage(item.content)
+    }))
+  ))
   localStorage.setItem(CHAT_SETTINGS_KEY, JSON.stringify({
     selectedLocalKeyId: selectedLocalKeyId.value,
     model: model.value,
@@ -389,7 +437,12 @@ function restoreState() {
   const savedHistory = safeJsonParse(localStorage.getItem(CHAT_STORAGE_KEY) || '[]', [])
   const savedSettings = safeJsonParse(localStorage.getItem(CHAT_SETTINGS_KEY) || '{}', {})
 
-  history.value = Array.isArray(savedHistory) ? savedHistory : []
+  history.value = Array.isArray(savedHistory)
+    ? savedHistory.map(item => ({
+        ...item,
+        content: restoreStoredMessageContent(item.content)
+      }))
+    : []
   selectedLocalKeyId.value = savedSettings.selectedLocalKeyId || ''
   modelByLocalKey.value = savedSettings.modelByLocalKey && typeof savedSettings.modelByLocalKey === 'object'
     ? savedSettings.modelByLocalKey
@@ -525,21 +578,42 @@ function renderMarkdown(content = '') {
   return blocks.filter((block, index, arr) => block !== '' || (index > 0 && arr[index - 1] !== '')).join('')
 }
 
+function getMessageText(content) {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .filter(item => item?.type === 'text')
+    .map(item => String(item.text || ''))
+    .join('\n')
+}
+
+function getMessageImages(content) {
+  if (!Array.isArray(content)) return []
+  return content
+    .filter(item => item?.type === 'image_url' || item?.type === 'image_stub')
+    .map((item, index) => ({
+      id: item.id || `${index}_${item.name || 'image'}`,
+      url: item?.image_url?.url || '',
+      name: item?.name || '图片附件'
+    }))
+}
+
 function shouldRenderPendingPlain(item) {
   return item?.role === 'assistant' && item?.pending
 }
 
 function shouldRenderMarkdown(item) {
-  return item?.role === 'assistant' && Boolean(item?.content) && !item?.pending
+  return item?.role === 'assistant' && Boolean(getMessageText(item?.content)) && !item?.pending
 }
 
 function canUseAsDraft(item) {
-  return Boolean(item?.content)
+  return Boolean(getMessageText(item?.content))
 }
 
 function useAsDraft(item) {
-  if (!item?.content) return
-  draft.value = item.content
+  const text = getMessageText(item?.content)
+  if (!text) return
+  draft.value = text
   clearDraftSource()
 }
 
@@ -568,9 +642,64 @@ function clearDraftSource() {
   draftSourceLabel.value = ''
 }
 
+function openImagePicker() {
+  imageInputRef.value?.click()
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+async function handleImageSelect(event) {
+  const files = Array.from(event?.target?.files || [])
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue
+    if (file.size > 5 * 1024 * 1024) {
+      ElMessage.warning(`图片「${file.name}」超过 5MB，先压缩再试`)
+      continue
+    }
+    const dataUrl = await fileToDataUrl(file)
+    pendingImages.value.push({
+      id: `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
+      name: file.name,
+      mimeType: file.type,
+      dataUrl
+    })
+  }
+  if (event?.target) event.target.value = ''
+}
+
+function removePendingImage(imageId) {
+  pendingImages.value = pendingImages.value.filter(item => item.id !== imageId)
+}
+
+function buildUserMessageContent() {
+  const parts = []
+  if (draft.value.trim()) {
+    parts.push({ type: 'text', text: draft.value.trim() })
+  }
+  for (const image of pendingImages.value) {
+    parts.push({
+      type: 'image_url',
+      image_url: { url: image.dataUrl },
+      name: image.name,
+      mimeType: image.mimeType,
+      id: image.id
+    })
+  }
+  if (parts.length === 1 && parts[0].type === 'text') return parts[0].text
+  return parts
+}
+
 function retryFromUserMessage(item) {
-  if (!item?.content || sending.value) return
-  draft.value = item.content
+  const text = getMessageText(item?.content)
+  if (!text || sending.value) return
+  draft.value = text
   clearDraftSource()
   sendMessage()
 }
@@ -1000,17 +1129,18 @@ async function sendMessage() {
   const requestLocalKeyId = selectedLocalKeyId.value
   const requestModel = model.value.trim()
   const requestDraft = draft.value.trim()
+  const requestContent = buildUserMessageContent()
 
   if (!requestLocalKeyId) return ElMessage.warning('先选一个本地 Key')
   if (!requestModel) return ElMessage.warning('先填模型')
-  if (!requestDraft) return ElMessage.warning('先输入消息')
+  if (!requestDraft && !pendingImages.value.length) return ElMessage.warning('先输入消息或选择图片')
 
   sending.value = true
   errorState.value = null
   stopRequested.value = false
   activeAbortController.value = new AbortController()
 
-  const userMessage = createMessage('user', requestDraft, {
+  const userMessage = createMessage('user', requestContent, {
     requestModel,
     requestLocalKeyId
   })
@@ -1029,6 +1159,7 @@ async function sendMessage() {
 
   const currentDraft = requestDraft
   draft.value = ''
+  pendingImages.value = []
   await nextTick()
   await scrollToBottom()
 

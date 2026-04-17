@@ -8,6 +8,7 @@ module.exports = {
   jwtSecret: process.env.JWT_SECRET || 'replace_me',
   appEncryptionKey: process.env.APP_ENCRYPTION_KEY || 'replace_with_32_byte_key',
   upstreamTimeoutMs: Number(process.env.UPSTREAM_TIMEOUT_MS || 150000),
+  jsonBodyLimit: process.env.JSON_BODY_LIMIT || '12mb',
   adminUsername: process.env.ADMIN_USERNAME || 'admin',
   adminPassword: process.env.ADMIN_PASSWORD || 'admin123456'
 };

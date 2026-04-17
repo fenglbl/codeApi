@@ -11,12 +11,13 @@ const adminLocalKeyRoutes = require('./routes/admin.local-key.routes');
 const adminRequestLogRoutes = require('./routes/admin.request-log.routes');
 const v1Routes = require('./routes/v1.routes');
 const errorHandler = require('./middlewares/error.middleware');
+const env = require('./config/env');
 
 const app = express();
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: env.jsonBodyLimit }));
 app.use(morgan('dev'));
 
 app.use('/health', healthRoutes);
