@@ -17,5 +17,6 @@ export const adminApi = {
   toggleLocalKey: (id) => request.patch(`/local-keys/${id}/toggle`),
   regenerateLocalKey: (id) => request.post(`/local-keys/${id}/regenerate`),
   deleteLocalKey: (id) => request.delete(`/local-keys/${id}`),
-  getRequestLogs: (params = {}) => request.get('/request-logs', { params })
+  getRequestLogs: (params = {}) => request.get('/request-logs', { params }),
+  uploadChatImage: (formData) => request.post('/uploads/chat-image', formData)
 }

@@ -133,10 +133,13 @@
         <input ref="imageInputRef" type="file" accept="image/*" multiple class="chat-file-input" @change="handleImageSelect" />
         <div v-if="pendingImages.length" class="chat-composer-images">
           <div v-for="image in pendingImages" :key="image.id" class="chat-composer-image-card">
-            <img :src="image.dataUrl" :alt="image.name" class="chat-composer-image-preview" />
+            <img :src="image.previewUrl" :alt="image.name" class="chat-composer-image-preview" />
             <div class="chat-composer-image-meta">
               <span class="chat-composer-image-name">{{ image.name }}</span>
               <button type="button" class="action-link chat-inline-action" @click="removePendingImage(image.id)">移除</button>
+            </div>
+            <div class="cell-sub">
+              {{ image.uploadState === 'uploading' ? '上传中…' : image.uploadState === 'error' ? '上传失败' : '已上传' }}
             </div>
           </div>
         </div>
@@ -626,7 +629,7 @@ function getMessageImages(content) {
     .filter(item => item?.type === 'image_url' || item?.type === 'image_stub')
     .map((item, index) => ({
       id: item.id || `${index}_${item.name || 'image'}`,
-      url: item?.image_url?.url || '',
+      url: item?.previewUrl || item?.image_url?.url || '',
       name: item?.name || '图片附件'
     }))
 }
@@ -728,14 +731,37 @@ async function addPendingImage(file) {
   }
 
   const { dataUrl, mimeType, width, height } = await compressImageFile(file)
+  const imageId = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`
   pendingImages.value.push({
-    id: `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
+    id: imageId,
     name: file.name,
     mimeType,
     width,
     height,
-    dataUrl
+    previewUrl: dataUrl,
+    uploadState: 'uploading',
+    remoteUrl: '',
+    objectKey: ''
   })
+
+  const formData = new FormData()
+  formData.append('file', file, file.name)
+
+  try {
+    const res = await adminApi.uploadChatImage(formData)
+    pendingImages.value = pendingImages.value.map(item => item.id === imageId ? {
+      ...item,
+      uploadState: 'done',
+      remoteUrl: res.url,
+      objectKey: res.objectKey
+    } : item)
+  } catch (err) {
+    pendingImages.value = pendingImages.value.map(item => item.id === imageId ? {
+      ...item,
+      uploadState: 'error'
+    } : item)
+    ElMessage.error(err?.message || '图片上传失败')
+  }
 }
 
 async function handleImageSelect(event) {
@@ -759,13 +785,15 @@ function buildUserMessageContent() {
   if (draft.value.trim()) {
     parts.push({ type: 'text', text: draft.value.trim() })
   }
-  for (const image of pendingImages.value) {
+  for (const image of pendingImages.value.filter(item => item.uploadState === 'done' && item.remoteUrl)) {
     parts.push({
       type: 'image_url',
-      image_url: { url: image.dataUrl },
+      image_url: { url: image.remoteUrl },
       name: image.name,
       mimeType: image.mimeType,
-      id: image.id
+      id: image.id,
+      objectKey: image.objectKey,
+      previewUrl: image.previewUrl
     })
   }
   if (parts.length === 1 && parts[0].type === 'text') return parts[0].text
@@ -1242,6 +1270,8 @@ async function sendMessage() {
   if (!requestLocalKeyId) return ElMessage.warning('先选一个本地 Key')
   if (!requestModel) return ElMessage.warning('先填模型')
   if (!requestDraft && !pendingImages.value.length) return ElMessage.warning('先输入消息或选择图片')
+  if (pendingImages.value.some(item => item.uploadState === 'uploading')) return ElMessage.warning('图片还在上传，等一下再发')
+  if (pendingImages.value.some(item => item.uploadState === 'error')) return ElMessage.warning('有图片上传失败了，移除或重新选择后再发')
   if (pendingImages.value.length && !modelSupportsImage.value) return ElMessage.warning('当前模型大概率不支持图片输入，换个视觉模型再试')
 
   sending.value = true
