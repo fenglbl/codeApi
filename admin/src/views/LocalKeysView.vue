@@ -57,16 +57,25 @@
                 <div class="metric-pair metric-pair-mono">{{ formatTokenPair(scope.row) }}</div>
               </template>
             </el-table-column>
-            <el-table-column label="模型映射" min-width="240">
+            <el-table-column label="模型映射" min-width="260">
               <template #default="scope">
-                <span class="metric-badge">{{ scope.row.modelMappings?.length || 0 }} 条</span>
-                <div v-if="scope.row.modelMappings?.length" class="mapping-preview-list">
+                <span class="metric-badge">{{ countAllMappings(scope.row) }} 条</span>
+                <div v-if="scope.row.upstreamModelMappings?.length" class="mapping-preview-list">
+                  <div v-for="group in scope.row.upstreamModelMappings.slice(0, 2)" :key="group.upstreamId" class="mapping-preview-group">
+                    <div class="cell-sub">{{ getUpstreamNameById(scope.row, group.upstreamId) }}</div>
+                    <div v-for="item in (group.modelMappings || []).slice(0, 2)" :key="`${group.upstreamId}-${item.localModel}-${item.upstreamModel}`" class="mapping-preview-item">
+                      <code class="code-inline mapping-code">{{ item.localModel }}</code>
+                      <span class="mapping-preview-arrow">→</span>
+                      <code class="code-inline mapping-code">{{ item.upstreamModel }}</code>
+                    </div>
+                  </div>
+                </div>
+                <div v-else-if="scope.row.modelMappings?.length" class="mapping-preview-list">
                   <div v-for="item in scope.row.modelMappings.slice(0, 2)" :key="`${item.localModel}-${item.upstreamModel}`" class="mapping-preview-item">
                     <code class="code-inline mapping-code">{{ item.localModel }}</code>
                     <span class="mapping-preview-arrow">→</span>
                     <code class="code-inline mapping-code">{{ item.upstreamModel }}</code>
                   </div>
-                  <div v-if="scope.row.modelMappings.length > 2" class="cell-sub">还有 {{ scope.row.modelMappings.length - 2 }} 条未展开</div>
                 </div>
               </template>
             </el-table-column>
@@ -144,18 +153,40 @@
           <div class="mapping-head">
             <div>
               <div class="form-block-title">模型映射</div>
-              <div class="form-block-desc">左边写本地模型名，右边写真正发给上游的模型名。下面会按当前默认上游和已绑定上游给你建议。</div>
+              <div class="form-block-desc">模型映射现在跟着上游走。你切哪个上游，就编辑哪个上游自己的映射，不再把所有上游混在一起。</div>
             </div>
             <div class="mapping-meta dialog-action-row">
               <span class="metric-badge">{{ mappingCount }} 条</span>
-              <el-button size="small" class="toolbar-ghost-btn" @click="addMapping">新增映射</el-button>
+              <el-button size="small" class="toolbar-ghost-btn" @click="addMapping" :disabled="!selectedMappingUpstreamId">新增映射</el-button>
             </div>
           </div>
 
           <div class="mapping-suggest-shell">
             <div class="mapping-suggest-head">
+              <div class="form-block-title no-margin">当前映射上游</div>
+              <div class="cell-sub">先选一个上游，再编辑这家的模型映射。</div>
+            </div>
+            <div v-if="boundUpstreams.length" class="route-choice-grid mapping-upstream-grid">
+              <button
+                v-for="item in boundUpstreams"
+                :key="item.id"
+                type="button"
+                class="route-choice-card"
+                :class="selectedMappingUpstreamId === item.id ? 'is-active' : ''"
+                @click="selectedMappingUpstreamId = item.id"
+              >
+                <span class="route-choice-title">{{ item.name }}</span>
+                <span class="route-choice-sub">{{ item.baseUrl }}</span>
+              </button>
+            </div>
+            <div v-else class="inline-empty-tip">先选绑定上游，下面的模型映射才知道该归到谁名下。</div>
+            <div v-if="selectedMappingUpstreamName" class="field-hint">当前正在编辑：{{ selectedMappingUpstreamName }}</div>
+          </div>
+
+          <div class="mapping-suggest-shell">
+            <div class="mapping-suggest-head">
               <div class="form-block-title no-margin">可用模型建议</div>
-              <div class="cell-sub">优先显示默认上游模型，没设默认时就汇总已绑定上游。</div>
+              <div class="cell-sub">只显示当前选中上游自己的模型列表。</div>
             </div>
             <div v-if="suggestedModels.length" class="mapping-suggest-list">
               <button
@@ -168,12 +199,11 @@
                 {{ model }}
               </button>
             </div>
-            <div v-if="defaultUpstreamName" class="field-hint">当前建议优先来自默认上游：{{ defaultUpstreamName }}</div>
-            <div v-else class="field-hint">还没设默认上游时，会汇总所有已绑定上游模型给建议。</div>
-            <div v-if="!suggestedModels.length" class="inline-empty-tip">当前绑定上游还没有可用模型列表。你可以先去上游管理里同步模型，再回来点这里。</div>
+            <div v-if="selectedMappingUpstreamName" class="field-hint">当前建议来自：{{ selectedMappingUpstreamName }}</div>
+            <div v-if="selectedMappingUpstreamId && !suggestedModels.length" class="inline-empty-tip">当前上游还没有同步出模型列表。你可以先去上游管理里同步模型，再回来继续配。</div>
           </div>
 
-          <div v-if="mappingRows.length" class="mapping-list">
+          <div v-if="selectedMappingUpstreamId && mappingRows.length" class="mapping-list">
             <div v-for="item in mappingRows" :key="item.uid" class="mapping-row-card">
               <div class="mapping-row-grid">
                 <el-input v-model="item.localModel" placeholder="本地模型名，例如：chat-model" />
@@ -181,18 +211,19 @@
                 <el-input v-model="item.upstreamModel" placeholder="上游模型名，例如：gpt-4o-mini / qwen3.5-9b" />
                 <button class="action-link is-danger" type="button" @click="removeMapping(item.uid)">删除</button>
               </div>
-              <div class="mapping-row-note">留空不会保存；常见做法是先一比一映射，再按需改成本地别名。</div>
+              <div class="mapping-row-note">这条映射只属于当前选中的上游；切到别的上游会显示它自己的映射。</div>
             </div>
           </div>
-          <div v-else class="inline-empty-tip">还没加映射。没有特殊别名需求也可以直接留空。</div>
+          <div v-else-if="selectedMappingUpstreamId" class="inline-empty-tip">这个上游还没加映射。没有特殊别名需求也可以直接留空。</div>
+          <div v-else class="inline-empty-tip">先选一个要编辑映射的上游。</div>
 
           <div class="mapping-quick-actions">
-            <button class="action-link" type="button" @click="addPresetMapping('chat-model', 'gpt-4o-mini')">+ chat-model</button>
-            <button class="action-link" type="button" @click="addPresetMapping('gpt-local', 'gpt-4o-mini')">+ gpt-local</button>
-            <button class="action-link" type="button" @click="addPresetMapping('qwen-local', 'qwen3.5-9b')">+ qwen-local</button>
-            <button v-if="mappingRows.length" class="action-link is-danger" type="button" @click="clearMappings">清空映射</button>
+            <button class="action-link" type="button" @click="addPresetMapping('chat-model', 'gpt-4o-mini')" :disabled="!selectedMappingUpstreamId">+ chat-model</button>
+            <button class="action-link" type="button" @click="addPresetMapping('gpt-local', 'gpt-4o-mini')" :disabled="!selectedMappingUpstreamId">+ gpt-local</button>
+            <button class="action-link" type="button" @click="addPresetMapping('qwen-local', 'qwen3.5-9b')" :disabled="!selectedMappingUpstreamId">+ qwen-local</button>
+            <button v-if="mappingRows.length" class="action-link is-danger" type="button" @click="clearMappings">清空当前上游映射</button>
           </div>
-          <div class="field-hint">只有本地模型名和上游模型名都填了，保存时才会记进去。</div>
+          <div class="field-hint">只有本地模型名和上游模型名都填了，保存时才会记进当前上游名下。</div>
         </div>
 
         <div class="form-block form-block-inline">
@@ -273,6 +304,8 @@ const visible = ref(false)
 const saving = ref(false)
 const editingId = ref('')
 const mappingRows = ref([])
+const selectedMappingUpstreamId = ref('')
+const upstreamMappingDrafts = ref({})
 const rawKeyVisible = ref(false)
 const latestRawKey = ref('')
 const latestRawKeyName = ref('')
@@ -282,13 +315,11 @@ const form = reactive({ name: '', remark: '', enabled: true, upstreamBindings: [
 const enabledCount = computed(() => rows.value.filter(item => item.enabled).length)
 const boundUpstreams = computed(() => upstreams.value.filter(item => form.upstreamBindings.includes(item.id)))
 const defaultUpstreamName = computed(() => boundUpstreams.value.find(item => item.id === form.defaultUpstreamId)?.name || '')
+const selectedMappingUpstreamName = computed(() => boundUpstreams.value.find(item => item.id === selectedMappingUpstreamId.value)?.name || '')
 const mappingCount = computed(() => getCleanMappings().length)
 const suggestedModels = computed(() => {
-  const sourceUpstreams = form.defaultUpstreamId
-    ? boundUpstreams.value.filter(item => item.id === form.defaultUpstreamId)
-    : boundUpstreams.value
-
-  const models = sourceUpstreams.flatMap(item => Array.isArray(item.models) ? item.models : [])
+  const sourceUpstream = boundUpstreams.value.find(item => item.id === selectedMappingUpstreamId.value)
+  const models = Array.isArray(sourceUpstream?.models) ? sourceUpstream.models : []
   return [...new Set(models.filter(Boolean))].slice(0, 16)
 })
 
@@ -296,7 +327,38 @@ watch(() => form.upstreamBindings.slice(), (list) => {
   if (!list.includes(form.defaultUpstreamId)) {
     form.defaultUpstreamId = list[0] || ''
   }
+
+  const nextDrafts = {}
+  for (const upstreamId of list) {
+    nextDrafts[upstreamId] = upstreamMappingDrafts.value[upstreamId] || []
+  }
+  upstreamMappingDrafts.value = nextDrafts
+
+  if (!list.includes(selectedMappingUpstreamId.value)) {
+    selectedMappingUpstreamId.value = form.defaultUpstreamId || list[0] || ''
+  }
 })
+
+watch(() => form.defaultUpstreamId, (value) => {
+  if (!selectedMappingUpstreamId.value && value) {
+    selectedMappingUpstreamId.value = value
+  }
+})
+
+watch(selectedMappingUpstreamId, (upstreamId) => {
+  mappingRows.value = (upstreamMappingDrafts.value[upstreamId] || []).map(item => createMappingRow(item.localModel, item.upstreamModel))
+})
+
+watch(mappingRows, (list) => {
+  if (!selectedMappingUpstreamId.value) return
+  upstreamMappingDrafts.value = {
+    ...upstreamMappingDrafts.value,
+    [selectedMappingUpstreamId.value]: list.map(item => ({
+      localModel: item.localModel,
+      upstreamModel: item.upstreamModel
+    }))
+  }
+}, { deep: true })
 
 function createMappingRow(localModel = '', upstreamModel = '') {
   return {
@@ -315,7 +377,37 @@ function getCleanMappings() {
     .filter(item => item.localModel && item.upstreamModel)
 }
 
+function getAllCleanUpstreamMappings() {
+  return Object.entries(upstreamMappingDrafts.value)
+    .map(([upstreamId, mappings]) => ({
+      upstreamId,
+      modelMappings: (mappings || [])
+        .map(item => ({
+          localModel: String(item.localModel || '').trim(),
+          upstreamModel: String(item.upstreamModel || '').trim()
+        }))
+        .filter(item => item.localModel && item.upstreamModel)
+    }))
+    .filter(item => item.upstreamId && item.modelMappings.length)
+}
+
+function countAllMappings(row) {
+  if (Array.isArray(row?.upstreamModelMappings) && row.upstreamModelMappings.length) {
+    return row.upstreamModelMappings.reduce((sum, item) => sum + (Array.isArray(item?.modelMappings) ? item.modelMappings.length : 0), 0)
+  }
+  return Array.isArray(row?.modelMappings) ? row.modelMappings.length : 0
+}
+
+function getUpstreamNameById(row, upstreamId) {
+  const found = (row?.upstreamBindings || []).find(item => String(item?.id || item?._id || item) === String(upstreamId))
+  return found?.name || '未命名上游'
+}
+
 function addMapping() {
+  if (!selectedMappingUpstreamId.value) {
+    ElMessage.warning('先选一个要编辑映射的上游')
+    return
+  }
   mappingRows.value.push(createMappingRow())
 }
 
@@ -337,6 +429,10 @@ function addPresetMapping(localModel, upstreamModel) {
 }
 
 function addSuggestedModel(model) {
+  if (!selectedMappingUpstreamId.value) {
+    ElMessage.warning('先选一个要编辑映射的上游')
+    return
+  }
   const exists = mappingRows.value.some(item => String(item.localModel || '').trim() === model)
   if (exists) {
     ElMessage.warning(`映射「${model}」已经有了`)
@@ -408,6 +504,8 @@ function resetForm() {
   form.upstreamBindings = []
   form.defaultUpstreamId = ''
   mappingRows.value = []
+  selectedMappingUpstreamId.value = ''
+  upstreamMappingDrafts.value = {}
 }
 
 function openCreate() {
@@ -422,7 +520,17 @@ function openEdit(row) {
   form.enabled = row.enabled
   form.upstreamBindings = (row.upstreamBindings || []).map(x => x.id || x._id || x)
   form.defaultUpstreamId = row.defaultUpstreamId?.id || row.defaultUpstreamId?._id || row.defaultUpstreamId || ''
-  mappingRows.value = (row.modelMappings || []).map(x => createMappingRow(x.localModel, x.upstreamModel))
+  const groups = Array.isArray(row.upstreamModelMappings) && row.upstreamModelMappings.length
+    ? row.upstreamModelMappings
+    : (form.defaultUpstreamId && Array.isArray(row.modelMappings) && row.modelMappings.length
+        ? [{ upstreamId: form.defaultUpstreamId, modelMappings: row.modelMappings }]
+        : [])
+  upstreamMappingDrafts.value = Object.fromEntries(groups.map(group => [
+    String(group.upstreamId?.id || group.upstreamId?._id || group.upstreamId),
+    (group.modelMappings || []).map(item => ({ localModel: item.localModel || '', upstreamModel: item.upstreamModel || '' }))
+  ]))
+  selectedMappingUpstreamId.value = form.defaultUpstreamId || form.upstreamBindings[0] || ''
+  mappingRows.value = (upstreamMappingDrafts.value[selectedMappingUpstreamId.value] || []).map(x => createMappingRow(x.localModel, x.upstreamModel))
   visible.value = true
 }
 
@@ -443,7 +551,7 @@ function validateForm() {
     return false
   }
 
-  const invalidMapping = mappingRows.value.find(item => {
+  const invalidMapping = Object.values(upstreamMappingDrafts.value).flat().find(item => {
     const localModel = String(item.localModel || '').trim()
     const upstreamModel = String(item.upstreamModel || '').trim()
     return (localModel && !upstreamModel) || (!localModel && upstreamModel)
@@ -462,7 +570,15 @@ async function save() {
 
   saving.value = true
   try {
-    const payload = { ...form, name: String(form.name || '').trim(), remark: String(form.remark || '').trim(), modelMappings: getCleanMappings() }
+    const scopedMappings = getAllCleanUpstreamMappings()
+    const fallbackMappings = scopedMappings.find(item => item.upstreamId === form.defaultUpstreamId)?.modelMappings || []
+    const payload = {
+      ...form,
+      name: String(form.name || '').trim(),
+      remark: String(form.remark || '').trim(),
+      modelMappings: fallbackMappings,
+      upstreamModelMappings: scopedMappings
+    }
     const res = editingId.value ? await adminApi.updateLocalKey(editingId.value, payload) : await adminApi.createLocalKey(payload)
     if (res.rawKey) {
       revealedKeys.value[res.id] = res.rawKey

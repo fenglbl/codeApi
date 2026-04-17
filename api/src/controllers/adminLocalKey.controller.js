@@ -9,8 +9,43 @@ function maskKey(rawKey) {
   return `${rawKey.slice(0, 10)}******${rawKey.slice(-6)}`;
 }
 
+function normalizeUpstreamModelMappings(upstreamModelMappings = [], upstreamBindings = [], legacyModelMappings = [], defaultUpstreamId = null) {
+  const bindingIds = new Set((upstreamBindings || []).map(item => String(item?.id || item?._id || item)).filter(Boolean));
+  const rows = Array.isArray(upstreamModelMappings)
+    ? upstreamModelMappings
+        .map(item => ({
+          upstreamId: String(item?.upstreamId?.id || item?.upstreamId?._id || item?.upstreamId || '').trim(),
+          modelMappings: Array.isArray(item?.modelMappings)
+            ? item.modelMappings
+                .map(mapping => ({
+                  localModel: String(mapping?.localModel || '').trim(),
+                  upstreamModel: String(mapping?.upstreamModel || '').trim()
+                }))
+                .filter(mapping => mapping.localModel && mapping.upstreamModel)
+            : []
+        }))
+        .filter(item => item.upstreamId && bindingIds.has(item.upstreamId))
+    : [];
+
+  if (rows.length) return rows;
+
+  const fallbackUpstreamId = String(defaultUpstreamId?.id || defaultUpstreamId?._id || defaultUpstreamId || '').trim();
+  const fallbackMappings = Array.isArray(legacyModelMappings)
+    ? legacyModelMappings
+        .map(mapping => ({
+          localModel: String(mapping?.localModel || '').trim(),
+          upstreamModel: String(mapping?.upstreamModel || '').trim()
+        }))
+        .filter(mapping => mapping.localModel && mapping.upstreamModel)
+    : [];
+
+  if (!fallbackUpstreamId || !fallbackMappings.length || !bindingIds.has(fallbackUpstreamId)) return [];
+  return [{ upstreamId: fallbackUpstreamId, modelMappings: fallbackMappings }];
+}
+
 function serialize(doc, tokenStats = {}) {
   const rawKey = doc.rawKeyEncrypted && doc.rawKeyIv ? decrypt(doc.rawKeyEncrypted, doc.rawKeyIv) : '';
+  const upstreamModelMappings = normalizeUpstreamModelMappings(doc.upstreamModelMappings || [], doc.upstreamBindings || [], doc.modelMappings || [], doc.defaultUpstreamId);
   return {
     id: doc._id,
     name: doc.name,
@@ -20,7 +55,8 @@ function serialize(doc, tokenStats = {}) {
     remark: doc.remark,
     upstreamBindings: doc.upstreamBindings || [],
     defaultUpstreamId: doc.defaultUpstreamId,
-    modelMappings: doc.modelMappings || [],
+    modelMappings: upstreamModelMappings.find(item => String(item.upstreamId) === String(doc.defaultUpstreamId?.id || doc.defaultUpstreamId?._id || doc.defaultUpstreamId || ''))?.modelMappings || doc.modelMappings || [],
+    upstreamModelMappings,
     lastUsedAt: doc.lastUsedAt,
     usageCount: doc.usageCount,
     promptTokens: tokenStats.promptTokens || 0,
@@ -54,7 +90,7 @@ async function list(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    const { name, enabled = true, remark = '', upstreamBindings = [], defaultUpstreamId = null, modelMappings = [] } = req.body || {};
+    const { name, enabled = true, remark = '', upstreamBindings = [], defaultUpstreamId = null, modelMappings = [], upstreamModelMappings = [] } = req.body || {};
     if (!name) return res.status(400).json({ message: 'name is required' });
     const rawKey = generateLocalApiKey();
     const { encrypted, iv } = encrypt(rawKey);
@@ -68,7 +104,8 @@ async function create(req, res, next) {
       remark,
       upstreamBindings,
       defaultUpstreamId: defaultUpstreamId || upstreamBindings[0] || null,
-      modelMappings
+      modelMappings,
+      upstreamModelMappings: normalizeUpstreamModelMappings(upstreamModelMappings, upstreamBindings, modelMappings, defaultUpstreamId || upstreamBindings[0] || null)
     });
     const populated = await LocalApiKey.findById(doc._id).populate('upstreamBindings defaultUpstreamId');
     res.status(201).json({ ...serialize(populated), rawKey });
@@ -79,13 +116,21 @@ async function update(req, res, next) {
   try {
     const doc = await LocalApiKey.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: 'Not found' });
-    const { name, enabled, remark, upstreamBindings, defaultUpstreamId, modelMappings } = req.body || {};
+    const { name, enabled, remark, upstreamBindings, defaultUpstreamId, modelMappings, upstreamModelMappings } = req.body || {};
     if (name !== undefined) doc.name = name;
     if (enabled !== undefined) doc.enabled = enabled;
     if (remark !== undefined) doc.remark = remark;
     if (upstreamBindings !== undefined) doc.upstreamBindings = upstreamBindings;
     if (defaultUpstreamId !== undefined) doc.defaultUpstreamId = defaultUpstreamId;
     if (modelMappings !== undefined) doc.modelMappings = modelMappings;
+    if (upstreamBindings !== undefined || defaultUpstreamId !== undefined || upstreamModelMappings !== undefined || modelMappings !== undefined) {
+      doc.upstreamModelMappings = normalizeUpstreamModelMappings(
+        upstreamModelMappings !== undefined ? upstreamModelMappings : doc.upstreamModelMappings,
+        upstreamBindings !== undefined ? upstreamBindings : doc.upstreamBindings,
+        modelMappings !== undefined ? modelMappings : doc.modelMappings,
+        defaultUpstreamId !== undefined ? defaultUpstreamId : doc.defaultUpstreamId
+      );
+    }
     await doc.save();
     const populated = await LocalApiKey.findById(doc._id).populate('upstreamBindings defaultUpstreamId');
     res.json(serialize(populated));

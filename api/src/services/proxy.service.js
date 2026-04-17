@@ -9,10 +9,14 @@ function resolveUpstream(localApiKey) {
   return upstream;
 }
 
-function mapModel(localApiKey, inputModel) {
+function mapModel(localApiKey, inputModel, upstream = null) {
   if (!inputModel) return inputModel;
-  const found = (localApiKey.modelMappings || []).find(x => x.localModel === inputModel);
-  return found ? found.upstreamModel : inputModel;
+  const upstreamId = String(upstream?._id || upstream?.id || localApiKey?.defaultUpstreamId?._id || localApiKey?.defaultUpstreamId?.id || localApiKey?.defaultUpstreamId || '');
+  const upstreamMappings = (localApiKey.upstreamModelMappings || []).find(item => String(item?.upstreamId?._id || item?.upstreamId?.id || item?.upstreamId || '') === upstreamId);
+  const scopedFound = (upstreamMappings?.modelMappings || []).find(x => x.localModel === inputModel);
+  if (scopedFound) return scopedFound.upstreamModel;
+  const legacyFound = (localApiKey.modelMappings || []).find(x => x.localModel === inputModel);
+  return legacyFound ? legacyFound.upstreamModel : inputModel;
 }
 
 function joinUrl(baseUrl, path) {
@@ -170,7 +174,7 @@ async function proxyOpenAiRequest({ localApiKey, path, method = 'POST', body = n
   const url = joinUrl(upstream.baseUrl, path);
   const payload = body && typeof body === 'object' ? { ...body } : body;
 
-  if (payload && payload.model) payload.model = mapModel(localApiKey, payload.model);
+  if (payload && payload.model) payload.model = mapModel(localApiKey, payload.model, upstream);
 
   try {
     const response = await axios({

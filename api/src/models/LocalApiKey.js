@@ -5,6 +5,11 @@ const ModelMappingSchema = new mongoose.Schema({
   upstreamModel: { type: String, required: true }
 }, { _id: false });
 
+const UpstreamModelMappingSchema = new mongoose.Schema({
+  upstreamId: { type: mongoose.Schema.Types.ObjectId, ref: 'UpstreamProvider', required: true },
+  modelMappings: { type: [ModelMappingSchema], default: [] }
+}, { _id: false });
+
 const LocalApiKeySchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   keyPrefix: { type: String, required: true },
@@ -16,6 +21,7 @@ const LocalApiKeySchema = new mongoose.Schema({
   upstreamBindings: [{ type: mongoose.Schema.Types.ObjectId, ref: 'UpstreamProvider' }],
   defaultUpstreamId: { type: mongoose.Schema.Types.ObjectId, ref: 'UpstreamProvider', default: null },
   modelMappings: [ModelMappingSchema],
+  upstreamModelMappings: { type: [UpstreamModelMappingSchema], default: [] },
   lastUsedAt: { type: Date, default: null },
   usageCount: { type: Number, default: 0 }
 }, { timestamps: true });
