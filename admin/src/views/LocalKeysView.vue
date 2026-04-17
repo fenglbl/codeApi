@@ -150,18 +150,7 @@
         </div>
 
         <div class="form-block">
-          <div class="mapping-head">
-            <div>
-              <div class="form-block-title">模型映射</div>
-              <div class="form-block-desc">模型映射现在跟着上游走。你切哪个上游，就编辑哪个上游自己的映射，不再把所有上游混在一起。</div>
-            </div>
-            <div class="mapping-meta dialog-action-row">
-              <span class="metric-badge">{{ mappingCount }} 条</span>
-              <el-button size="small" class="toolbar-ghost-btn" @click="addMapping" :disabled="!selectedMappingUpstreamId">新增映射</el-button>
-            </div>
-          </div>
-
-          <div class="mapping-workspace-shell">
+          <div class="mapping-workspace-shell no-top-margin">
             <div class="mapping-suggest-head">
               <div>
                 <div class="form-block-title no-margin">当前映射上游</div>
