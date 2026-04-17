@@ -2116,6 +2116,29 @@ select {
   padding: 14px 16px;
 }
 
+.mapping-workspace-shell {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: var(--subtle-block-bg);
+}
+
+.mapping-workspace-body {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.mapping-workspace-section {
+  padding-top: 2px;
+}
+
+.mapping-workspace-section + .mapping-workspace-section {
+  border-top: 1px solid rgba(148, 163, 184, 0.10);
+  padding-top: 14px;
+}
+
 .mapping-upstream-tabs {
   margin-top: 12px;
   display: flex;
@@ -2213,6 +2236,10 @@ select {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.mapping-list.no-top-margin {
+  margin-top: 0;
 }
 
 .mapping-row-card {

@@ -161,14 +161,18 @@
             </div>
           </div>
 
-          <div class="mapping-suggest-shell mapping-upstream-shell">
+          <div class="mapping-workspace-shell">
             <div class="mapping-suggest-head">
               <div>
                 <div class="form-block-title no-margin">当前映射上游</div>
-                <div class="cell-sub">切哪个 tab，就编辑哪个上游自己的映射。</div>
+                <div class="cell-sub">切哪个 tab，就在下面直接编辑这个上游的模型建议和映射列表。</div>
               </div>
-              <span v-if="selectedMappingUpstreamName" class="mini-tag is-more">当前：{{ selectedMappingUpstreamName }}</span>
+              <div class="mapping-meta dialog-action-row">
+                <span v-if="selectedMappingUpstreamName" class="mini-tag is-more">当前：{{ selectedMappingUpstreamName }}</span>
+                <el-button size="small" class="toolbar-ghost-btn" @click="addMapping" :disabled="!selectedMappingUpstreamId">新增映射</el-button>
+              </div>
             </div>
+
             <div v-if="boundUpstreams.length" class="mapping-upstream-tabs" role="tablist" aria-label="当前映射上游">
               <button
                 v-for="item in boundUpstreams"
@@ -183,49 +187,53 @@
               </button>
             </div>
             <div v-else class="inline-empty-tip">先选绑定上游，下面的模型映射才知道该归到谁名下。</div>
-          </div>
 
-          <div class="mapping-suggest-shell">
-            <div class="mapping-suggest-head">
-              <div class="form-block-title no-margin">可用模型建议</div>
-              <div class="cell-sub">只显示当前选中上游自己的模型列表。</div>
-            </div>
-            <div v-if="suggestedModels.length" class="mapping-suggest-list">
-              <button
-                v-for="model in suggestedModels"
-                :key="model"
-                type="button"
-                class="mapping-suggest-chip"
-                @click="addSuggestedModel(model)"
-              >
-                {{ model }}
-              </button>
-            </div>
-            <div v-if="selectedMappingUpstreamName" class="field-hint">当前建议来自：{{ selectedMappingUpstreamName }}</div>
-            <div v-if="selectedMappingUpstreamId && !suggestedModels.length" class="inline-empty-tip">当前上游还没有同步出模型列表。你可以先去上游管理里同步模型，再回来继续配。</div>
-          </div>
-
-          <div v-if="selectedMappingUpstreamId && mappingRows.length" class="mapping-list">
-            <div v-for="item in mappingRows" :key="item.uid" class="mapping-row-card">
-              <div class="mapping-row-grid">
-                <el-input v-model="item.localModel" placeholder="本地模型名，例如：chat-model" />
-                <div class="mapping-arrow">→</div>
-                <el-input v-model="item.upstreamModel" placeholder="上游模型名，例如：gpt-4o-mini / qwen3.5-9b" />
-                <button class="action-link is-danger" type="button" @click="removeMapping(item.uid)">删除</button>
+            <div class="mapping-workspace-body">
+              <div class="mapping-suggest-shell mapping-workspace-section">
+                <div class="mapping-suggest-head">
+                  <div class="form-block-title no-margin">可用模型建议</div>
+                  <div class="cell-sub">只显示当前选中上游自己的模型列表。</div>
+                </div>
+                <div v-if="suggestedModels.length" class="mapping-suggest-list">
+                  <button
+                    v-for="model in suggestedModels"
+                    :key="model"
+                    type="button"
+                    class="mapping-suggest-chip"
+                    @click="addSuggestedModel(model)"
+                  >
+                    {{ model }}
+                  </button>
+                </div>
+                <div v-if="selectedMappingUpstreamName" class="field-hint">当前建议来自：{{ selectedMappingUpstreamName }}</div>
+                <div v-if="selectedMappingUpstreamId && !suggestedModels.length" class="inline-empty-tip">当前上游还没有同步出模型列表。你可以先去上游管理里同步模型，再回来继续配。</div>
               </div>
-              <div class="mapping-row-note">这条映射只属于当前选中的上游；切到别的上游会显示它自己的映射。</div>
+
+              <div class="mapping-workspace-section">
+                <div v-if="selectedMappingUpstreamId && mappingRows.length" class="mapping-list no-top-margin">
+                  <div v-for="item in mappingRows" :key="item.uid" class="mapping-row-card">
+                    <div class="mapping-row-grid">
+                      <el-input v-model="item.localModel" placeholder="本地模型名，例如：chat-model" />
+                      <div class="mapping-arrow">→</div>
+                      <el-input v-model="item.upstreamModel" placeholder="上游模型名，例如：gpt-4o-mini / qwen3.5-9b" />
+                      <button class="action-link is-danger" type="button" @click="removeMapping(item.uid)">删除</button>
+                    </div>
+                    <div class="mapping-row-note">这条映射只属于当前选中的上游；切到别的上游会显示它自己的映射。</div>
+                  </div>
+                </div>
+                <div v-else-if="selectedMappingUpstreamId" class="inline-empty-tip">这个上游还没加映射。没有特殊别名需求也可以直接留空。</div>
+                <div v-else class="inline-empty-tip">先选一个要编辑映射的上游。</div>
+
+                <div class="mapping-quick-actions">
+                  <button class="action-link" type="button" @click="addPresetMapping('chat-model', 'gpt-4o-mini')" :disabled="!selectedMappingUpstreamId">+ chat-model</button>
+                  <button class="action-link" type="button" @click="addPresetMapping('gpt-local', 'gpt-4o-mini')" :disabled="!selectedMappingUpstreamId">+ gpt-local</button>
+                  <button class="action-link" type="button" @click="addPresetMapping('qwen-local', 'qwen3.5-9b')" :disabled="!selectedMappingUpstreamId">+ qwen-local</button>
+                  <button v-if="mappingRows.length" class="action-link is-danger" type="button" @click="clearMappings">清空当前上游映射</button>
+                </div>
+                <div class="field-hint">只有本地模型名和上游模型名都填了，保存时才会记进当前上游名下。</div>
+              </div>
             </div>
           </div>
-          <div v-else-if="selectedMappingUpstreamId" class="inline-empty-tip">这个上游还没加映射。没有特殊别名需求也可以直接留空。</div>
-          <div v-else class="inline-empty-tip">先选一个要编辑映射的上游。</div>
-
-          <div class="mapping-quick-actions">
-            <button class="action-link" type="button" @click="addPresetMapping('chat-model', 'gpt-4o-mini')" :disabled="!selectedMappingUpstreamId">+ chat-model</button>
-            <button class="action-link" type="button" @click="addPresetMapping('gpt-local', 'gpt-4o-mini')" :disabled="!selectedMappingUpstreamId">+ gpt-local</button>
-            <button class="action-link" type="button" @click="addPresetMapping('qwen-local', 'qwen3.5-9b')" :disabled="!selectedMappingUpstreamId">+ qwen-local</button>
-            <button v-if="mappingRows.length" class="action-link is-danger" type="button" @click="clearMappings">清空当前上游映射</button>
-          </div>
-          <div class="field-hint">只有本地模型名和上游模型名都填了，保存时才会记进当前上游名下。</div>
         </div>
 
         <div class="form-block form-block-inline">
