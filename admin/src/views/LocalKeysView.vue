@@ -161,26 +161,28 @@
             </div>
           </div>
 
-          <div class="mapping-suggest-shell">
+          <div class="mapping-suggest-shell mapping-upstream-shell">
             <div class="mapping-suggest-head">
-              <div class="form-block-title no-margin">当前映射上游</div>
-              <div class="cell-sub">先选一个上游，再编辑这家的模型映射。</div>
+              <div>
+                <div class="form-block-title no-margin">当前映射上游</div>
+                <div class="cell-sub">切哪个 tab，就编辑哪个上游自己的映射。</div>
+              </div>
+              <span v-if="selectedMappingUpstreamName" class="mini-tag is-more">当前：{{ selectedMappingUpstreamName }}</span>
             </div>
-            <div v-if="boundUpstreams.length" class="route-choice-grid mapping-upstream-grid">
+            <div v-if="boundUpstreams.length" class="mapping-upstream-tabs" role="tablist" aria-label="当前映射上游">
               <button
                 v-for="item in boundUpstreams"
                 :key="item.id"
                 type="button"
-                class="route-choice-card"
+                class="mapping-upstream-tab"
                 :class="selectedMappingUpstreamId === item.id ? 'is-active' : ''"
+                :aria-selected="selectedMappingUpstreamId === item.id ? 'true' : 'false'"
                 @click="selectedMappingUpstreamId = item.id"
               >
-                <span class="route-choice-title">{{ item.name }}</span>
-                <span class="route-choice-sub">{{ item.baseUrl }}</span>
+                <span class="mapping-upstream-tab-label">{{ item.name }}</span>
               </button>
             </div>
             <div v-else class="inline-empty-tip">先选绑定上游，下面的模型映射才知道该归到谁名下。</div>
-            <div v-if="selectedMappingUpstreamName" class="field-hint">当前正在编辑：{{ selectedMappingUpstreamName }}</div>
           </div>
 
           <div class="mapping-suggest-shell">
