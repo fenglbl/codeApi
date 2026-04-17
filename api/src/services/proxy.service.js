@@ -26,6 +26,42 @@ function joinUrl(baseUrl, path) {
   return `${normalizedBase}${normalizedPath}`;
 }
 
+function isReadableStream(value) {
+  return value && typeof value.on === 'function' && typeof value.pipe === 'function'
+}
+
+async function readStreamBody(stream, limit = 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    let total = 0
+
+    stream.on('data', (chunk) => {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      total += buffer.length
+      if (total <= limit) chunks.push(buffer)
+    })
+
+    stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    stream.on('error', reject)
+  })
+}
+
+async function normalizeErrorResponse(err) {
+  const data = err?.response?.data
+  if (!data) return err
+
+  if (isReadableStream(data)) {
+    try {
+      const text = await readStreamBody(data)
+      err.response.data = text
+    } catch (_) {
+      err.response.data = err?.message || 'unknown_error'
+    }
+  }
+
+  return err
+}
+
 function extractErrorMessage(err) {
   const data = err?.response?.data;
   if (!data) return err?.message || 'unknown_error';
@@ -199,6 +235,7 @@ async function proxyOpenAiRequest({ localApiKey, path, method = 'POST', body = n
 
     return response;
   } catch (err) {
+    await normalizeErrorResponse(err)
     const statusCode = err.response?.status || 502;
     await writeRequestLog({
       localApiKey,
@@ -230,5 +267,6 @@ module.exports = {
   finalizeStreamLog,
   extractUsage,
   countInputChars,
-  countOutputChars
+  countOutputChars,
+  normalizeErrorResponse
 };

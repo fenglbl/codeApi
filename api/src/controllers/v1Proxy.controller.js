@@ -1,4 +1,4 @@
-const { proxyOpenAiRequest, finalizeStreamLog, extractErrorMessage } = require('../services/proxy.service');
+const { proxyOpenAiRequest, finalizeStreamLog, extractErrorMessage, normalizeErrorResponse } = require('../services/proxy.service');
 const LocalApiKey = require('../models/LocalApiKey');
 
 function buildSafeErrorBody(err) {
@@ -158,6 +158,7 @@ async function chatCompletions(req, res, next) {
     res.status(response.status).json(response.data);
   } catch (err) {
     if (err.response) {
+      await normalizeErrorResponse(err)
       return res.status(err.response.status).json(buildSafeErrorBody(err))
     }
     next(err);
@@ -170,7 +171,10 @@ async function embeddings(req, res, next) {
     await touchLocalKey(req.localApiKey);
     res.status(response.status).json(response.data);
   } catch (err) {
-    if (err.response) return res.status(err.response.status).json(buildSafeErrorBody(err));
+    if (err.response) {
+      await normalizeErrorResponse(err)
+      return res.status(err.response.status).json(buildSafeErrorBody(err));
+    }
     next(err);
   }
 }
