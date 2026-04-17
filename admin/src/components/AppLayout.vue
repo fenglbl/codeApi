@@ -35,7 +35,6 @@
               <span>{{ item.icon }}</span>
             </button>
           </div>
-          <span class="mini-tag topbar-theme-tag">{{ themeLabel }}</span>
           <el-button type="danger" plain class="toolbar-danger-btn" @click="logout">退出</el-button>
         </div>
       </div>
@@ -56,7 +55,7 @@ defineProps({
 
 const router = useRouter()
 const auth = useAuthStore()
-const { themePreference, themeLabel, setThemePreference } = useTheme()
+const { themePreference, setThemePreference } = useTheme()
 const themeOptions = [
   { value: 'system', label: '跟随系统', icon: '◐' },
   { value: 'light', label: '浅色模式', icon: '☀' },
