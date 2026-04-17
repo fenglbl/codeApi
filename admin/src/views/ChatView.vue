@@ -311,6 +311,10 @@ const suggestedModels = computed(() => {
 
 const hasExternalDraftContext = computed(() => Boolean(draftSourceLabel.value))
 
+const canSend = computed(() => Boolean(selectedLocalKeyId.value && model.value.trim() && (draft.value.trim() || pendingImages.value.length)) && !sending.value)
+
+const hasImageDraft = computed(() => pendingImages.value.length > 0)
+
 const composerPlaceholder = computed(() => {
   if (!selectedLocalKeyId.value) return '先选一个本地 Key，再开始聊天。'
   if (!model.value.trim()) return '先选一个模型，再输入消息。'
@@ -321,6 +325,8 @@ const composerHint = computed(() => {
   if (sending.value) return '正在生成中，可以继续看输出，也可以随时点停止。'
   if (!selectedLocalKeyId.value) return '先选本地 Key；系统提示词和重试次数在左上角设置里。'
   if (!model.value.trim()) return 'Key 已选好，再挑一个模型就能发。'
+  if (hasImageDraft.value && !draft.value.trim()) return `本次将发送 ${pendingImages.value.length} 张图片。`
+  if (hasImageDraft.value) return `本次将发送 ${pendingImages.value.length} 张图片和文本。`
   return '系统提示词在左上角设置里；历史会保存在当前浏览器。'
 })
 
@@ -659,6 +665,10 @@ async function handleImageSelect(event) {
   const files = Array.from(event?.target?.files || [])
   for (const file of files) {
     if (!file.type.startsWith('image/')) continue
+    if (pendingImages.value.length >= 3) {
+      ElMessage.warning('最多先发 3 张图片')
+      break
+    }
     if (file.size > 5 * 1024 * 1024) {
       ElMessage.warning(`图片「${file.name}」超过 5MB，先压缩再试`)
       continue
@@ -736,11 +746,12 @@ async function scrollToBottom() {
 
 async function copyMessage(content) {
   try {
-    await navigator.clipboard.writeText(content)
+    const text = typeof content === 'string' ? content : getMessageText(content)
+    await navigator.clipboard.writeText(text)
     ElMessage.success('已复制')
   } catch (_) {
     const textarea = document.createElement('textarea')
-    textarea.value = content
+    textarea.value = typeof content === 'string' ? content : getMessageText(content)
     document.body.appendChild(textarea)
     textarea.select()
     document.execCommand('copy')
@@ -759,6 +770,7 @@ async function handleMessageAreaClick(event) {
 
 function clearHistory() {
   history.value = []
+  pendingImages.value = []
   errorState.value = null
   persistState()
 }
@@ -832,6 +844,18 @@ function buildErrorState(err, fallbackPrompt = '') {
     ? err.data
     : JSON.stringify(err?.data || { message: err?.message || '请求失败' }, null, 2)
   const lowered = String(rawDetail || '').toLowerCase()
+
+  if (status === 413 || lowered.includes('request entity too large') || lowered.includes('payload too large')) {
+    return {
+      kind: 'warning',
+      chipClass: 'is-warning',
+      badge: '图片过大',
+      title: '这次请求太大了，图片没发出去',
+      desc: '通常是图片太大或一次带太多图。先压缩图片、减少数量，再试一次。',
+      detail: rawDetail,
+      suggestPrompt: fallbackPrompt
+    }
+  }
 
   if (status === 401 || lowered.includes('unauthorized') || lowered.includes('invalid api key')) {
     return {
