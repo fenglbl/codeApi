@@ -27,7 +27,7 @@
       <div class="panel-body dashboard-range-bar">
         <div>
           <div class="section-title">时间范围</div>
-          <div class="section-desc">24h 按小时，7天 / 30天按天聚合，别再盯死一个时间窗。</div>
+          <div class="section-desc">24h 按小时，7天 / 30天按天聚合。</div>
         </div>
         <div class="quick-filter-chips">
           <button v-for="item in rangeOptions" :key="item.value" class="quick-chip" :class="selectedRange === item.value ? 'is-active' : ''" @click="changeRange(item.value)">{{ item.label }}</button>
@@ -41,7 +41,7 @@
           <div class="dashboard-panel-head">
             <div>
               <div class="section-title">请求走势</div>
-              <div class="section-desc">{{ rangeDesc }}，顺手把成功 / 异常也分层标出来。</div>
+              <!-- <div class="section-desc">{{ rangeDesc }}，顺手把成功 / 异常也分层标出来。</div> -->
             </div>
           </div>
           <div ref="requestChartRef" class="echarts-shell"></div>
@@ -53,7 +53,7 @@
           <div class="dashboard-panel-head">
             <div>
               <div class="section-title">Token 统计</div>
-              <div class="section-desc">{{ tokenRangeDesc }}，柱状图看输入 / 输出更直给。</div>
+              <!-- <div class="section-desc">{{ tokenRangeDesc }}，柱状图看输入 / 输出更直给。</div> -->
             </div>
           </div>
           <div ref="tokenChartRef" class="echarts-shell"></div>
@@ -67,7 +67,7 @@
           <div class="dashboard-panel-head compact">
             <div>
               <div class="section-title">最近状态</div>
-              <div class="section-desc">拿当前范围日志算一眼，不搞花架子。</div>
+              <!-- <div class="section-desc">拿当前范围日志算一眼，不搞花架子。</div> -->
             </div>
           </div>
           <div class="dashboard-kpi-list">
@@ -100,7 +100,7 @@
           <div class="dashboard-panel-head compact">
             <div>
               <div class="section-title">高频上游</div>
-              <div class="section-desc">按当前范围日志粗看谁最常被打到。</div>
+              <!-- <div class="section-desc">按当前范围日志粗看谁最常被打到。</div> -->
             </div>
           </div>
           <div v-if="topUpstreams.length" class="dashboard-rank-list">
@@ -121,7 +121,7 @@
           <div class="dashboard-panel-head compact">
             <div>
               <div class="section-title">高频本地 Key</div>
-              <div class="section-desc">当前范围里，谁用得最勤快一眼看出来。</div>
+              <!-- <div class="section-desc">当前范围里，谁用得最勤快一眼看出来。</div> -->
             </div>
           </div>
           <div v-if="topLocalKeys.length" class="dashboard-rank-list">

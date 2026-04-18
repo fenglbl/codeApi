@@ -6,7 +6,7 @@
           <div class="chat-toolbar-head chat-toolbar-head-inline">
             <div class="chat-toolbar-heading">
               <div class="chat-toolbar-title">聊天调试台</div>
-              <div class="chat-toolbar-desc">直接验证本地 Key、模型映射和上游响应，也能承接日志页带过来的问题上下文。</div>
+              <!-- <div class="chat-toolbar-desc">直接验证本地 Key、模型映射和上游响应，也能承接日志页带过来的问题上下文。</div> -->
             </div>
 
           <div class="chat-toolbar-controls chat-toolbar-controls-inline">
@@ -170,13 +170,13 @@
 
     <el-dialog v-model="settingsVisible" title="聊天设置" width="680px" class="chat-settings-dialog">
       <div class="chat-settings-shell">
-        <div class="chat-settings-intro">
+        <!-- <div class="chat-settings-intro">
           <div>
             <div class="chat-settings-title">把这页调成你顺手的工作状态</div>
             <div class="chat-settings-desc">这里管的是聊天行为，不影响后台其他页面。改完就保存在当前浏览器。</div>
           </div>
           <span class="state-chip">本地保存</span>
-        </div>
+        </div> -->
 
         <div class="chat-settings-card">
           <div class="chat-settings-card-head">
@@ -202,7 +202,7 @@
                 <div class="chat-settings-card-title">输出模式</div>
                 <div class="chat-settings-card-desc">流式更像实时对话；非流式更稳定，适合对比完整结果。</div>
               </div>
-              <el-switch v-model="streamMode" active-text="流式输出" inactive-text="非流输出" />
+              <el-switch v-model="streamMode" active-text="流式" inactive-text="非流" />
             </div>
           </div>
 
@@ -223,9 +223,9 @@
             <div class="chat-settings-card-head chat-settings-card-head-stack">
               <div>
                 <div class="chat-settings-card-title">图片上传模式</div>
-                <div class="chat-settings-card-desc">默认关闭：直接用 base64 发图，不上传。开启后：先传 MinIO，再把远程地址发给模型。</div>
+                <div class="chat-settings-card-desc">默认关闭：直接用 base64 发图，不上传。开启后：先上传，再把远程地址发给模型。</div>
               </div>
-              <el-switch v-model="imageUploadEnabled" active-text="上传并使用 URL" inactive-text="直接 base64" />
+              <el-switch v-model="imageUploadEnabled" active-text="上传" inactive-text="base64" />
             </div>
           </div>
         </div>

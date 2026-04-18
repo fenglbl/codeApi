@@ -80,7 +80,7 @@
       <el-form :model="form" label-position="top">
         <div class="form-block">
           <div class="form-block-title">基础信息</div>
-          <div class="form-block-desc">先把名称、Base URL 和密钥填对。Base URL 可以填根域名，也可以直接填到 /v1。</div>
+          <div class="form-block-desc">Base URL 可以填根域名，也可以直接填到 /v1。</div>
           <div class="form-grid-2">
             <el-form-item label="名称"><el-input v-model="form.name" placeholder="例如：OpenAI / 9527 / 本地LM" /></el-form-item>
             <el-form-item label="Base URL"><el-input v-model="form.baseUrl" placeholder="https://api.openai.com 或 https://api.openai.com/v1" /></el-form-item>
@@ -91,13 +91,13 @@
 
         <div class="form-block">
           <div class="form-block-title">探活与模型同步</div>
-          <div class="form-block-desc">保存后可以直接测试连通性，或从上游拉一把模型列表回来，省得手填。</div>
+          <!-- <div class="form-block-desc">保存后可以直接测试连通性，或从上游拉一把模型列表回来，省得手填。</div> -->
           <div class="upstream-test-actions dialog-action-row">
             <el-button class="toolbar-ghost-btn" :disabled="!canRunRemoteAction || remoteLoading" :loading="testLoading" @click="runTest">连接测试</el-button>
             <el-button type="primary" plain class="toolbar-primary-btn dialog-primary-soft-btn" :disabled="!canRunRemoteAction || remoteLoading" :loading="modelsLoading" @click="syncModels">获取模型列表</el-button>
             <span v-if="editingId" class="mini-tag is-more">已保存后可直接探活 / 同步</span>
           </div>
-          <div class="field-hint" v-if="!editingId">先保存这个上游，才能测试和获取模型列表。</div>
+          <!-- <div class="field-hint" v-if="!editingId">先保存这个上游，才能测试和获取模型列表。</div>  -->
 
           <div v-if="testResult" class="result-card" :class="testResult.ok ? 'is-success' : 'is-danger'">
             <div class="result-card-title">{{ testResult.ok ? '连接正常' : '连接失败' }}</div>
@@ -121,7 +121,7 @@
           <div class="mapping-head">
             <div>
               <div class="form-block-title">模型列表</div>
-              <div class="form-block-desc">这里保存的是后台展示和本地映射时要用到的模型名。自动同步后还能继续微调，不用死磕逗号大文本。</div>
+              <div class="form-block-desc">这里保存的是后台展示和本地映射时要用到的模型名。 </div>
             </div>
             <div class="mapping-meta">
               <span class="metric-badge">{{ modelCount }} 个模型</span>

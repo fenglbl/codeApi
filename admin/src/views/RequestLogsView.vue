@@ -5,7 +5,7 @@
         <div class="table-toolbar log-toolbar-tight">
           <div>
             <div class="quick-filter-title">快速筛选</div>
-            <div class="muted">常用视角一把切，少点几下。</div>
+            <!-- <div class="muted">常用视角一把切，少点几下。</div> -->
           </div>
           <el-button class="toolbar-ghost-btn" @click="load" :loading="loading">刷新</el-button>
         </div>
@@ -48,7 +48,7 @@
           <div class="page-section-head page-section-head-tight">
             <div>
               <div class="section-title section-title-sm">条件筛选</div>
-              <div class="section-desc">先按路径、状态码、本地 Key、上游缩小范围，再往下看错误和耗时。</div>
+              <!-- <div class="section-desc">先按路径、状态码、本地 Key、上游缩小范围，再往下看错误和耗时。</div> -->
             </div>
           </div>
 

@@ -5,7 +5,7 @@
         <div class="auth-side-eyebrow">CodeAip</div>
         <div class="auth-side-title">本地 OpenAI 网关的控制台</div>
         <div class="auth-side-desc">
-          管理上游、分发本地 Key、维护模型映射、查看请求日志。少折腾环境，多看结果，排查也别瞎猜。
+          管理上游、分发本地 Key、维护模型映射、查看请求日志。
         </div>
         <div class="auth-side-points">
           <div class="auth-side-point"><span class="auth-side-dot"></span> 多上游统一接入</div>
@@ -17,13 +17,7 @@
 
       <div class="auth-card auth-card-strong">
         <div class="auth-title">登录后台</div>
-        <div class="auth-desc">输入管理员账号后进入控制台。默认账号可以改，但别改完就忘。</div>
-
-        <div class="auth-mini-info">
-          <span class="mini-tag">JWT 后台鉴权</span>
-          <span class="mini-tag">亮暗双主题</span>
-          <span class="mini-tag">本地网关管理</span>
-        </div>
+        <div class="auth-desc">输入管理员账号后进入控制台。</div>
 
         <el-form :model="form" @submit.prevent="handleLogin" label-position="top">
           <el-form-item label="用户名">
@@ -51,7 +45,7 @@ import { adminApi } from '../services/adminApi'
 const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(false)
-const form = reactive({ username: 'admin', password: 'admin123456' })
+const form = reactive({ username: '', password: '' })
 
 async function handleLogin() {
   loading.value = true

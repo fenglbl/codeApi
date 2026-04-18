@@ -105,7 +105,7 @@
       <el-form :model="form" label-position="top">
         <div class="form-block">
           <div class="form-block-title">基础信息</div>
-          <div class="form-block-desc">给这个 Key 起个能看懂的名字，备注里写清楚用途，后面排查舒服很多。</div>
+          <!-- <div class="form-block-desc">给这个 Key 起个能看懂的名字，备注里写清楚用途，后面排查舒服很多。</div> -->
           <div class="form-grid-2">
             <el-form-item label="名称"><el-input v-model="form.name" placeholder="例如：openclaw-win / test-client" /></el-form-item>
             <el-form-item label="备注"><el-input v-model="form.remark" placeholder="这个 Key 给谁用、走什么场景。" /></el-form-item>
@@ -114,7 +114,7 @@
 
         <div class="form-block">
           <div class="form-block-title">路由配置</div>
-          <div class="form-block-desc">先绑定可用上游，再从已绑定的上游里挑一个默认上游。默认上游就是没写特殊规则时的兜底出口。</div>
+          <!-- <div class="form-block-desc">先绑定可用上游，再从已绑定的上游里挑一个默认上游。默认上游就是没写特殊规则时的兜底出口。</div> -->
 
           <el-form-item label="绑定上游">
             <el-select v-model="form.upstreamBindings" multiple filterable class="full-width-control upstream-binding-select" placeholder="选择这个 Key 可用的上游">
@@ -127,7 +127,7 @@
             <div class="route-choice-head">
               <div>
                 <div class="form-block-title">默认上游</div>
-                <div class="form-block-desc route-choice-desc">从已绑定上游里选一个默认出口。点卡片比下拉框顺手点。</div>
+                <!-- <div class="form-block-desc route-choice-desc">从已绑定上游里选一个默认出口。点卡片比下拉框顺手点。</div> -->
               </div>
               <span v-if="form.defaultUpstreamId && defaultUpstreamName" class="mini-tag is-more">当前：{{ defaultUpstreamName }}</span>
             </div>
@@ -145,7 +145,7 @@
                 <span class="route-choice-sub">{{ item.baseUrl }}</span>
               </button>
             </div>
-            <div v-else class="inline-empty-tip">先选绑定上游，默认上游才有得选。</div>
+            <div v-else class="inline-empty-tip">请先选绑定上游。</div>
           </div>
         </div>
 
@@ -153,7 +153,7 @@
             <div class="mapping-suggest-head">
               <div>
                 <div class="form-block-title no-margin">当前映射上游</div>
-                <div class="cell-sub">切哪个 tab，就在下面直接编辑这个上游的模型建议和映射列表。</div>
+                <!-- <div class="cell-sub">切哪个 tab，就在下面直接编辑这个上游的模型建议和映射列表。</div> -->
               </div>
               <div class="mapping-meta dialog-action-row">
                 <span v-if="selectedMappingUpstreamName" class="mini-tag is-more">当前：{{ selectedMappingUpstreamName }}</span>
@@ -174,13 +174,13 @@
                 <span class="mapping-upstream-tab-label">{{ item.name }}</span>
               </button>
             </div>
-            <div v-else class="inline-empty-tip">先选绑定上游，下面的模型映射才知道该归到谁名下。</div>
+            <div v-else class="inline-empty-tip">先选绑定上游。</div>
 
             <div class="mapping-workspace-body">
               <div class="mapping-suggest-shell mapping-workspace-section">
                 <div class="mapping-suggest-head">
                   <div class="form-block-title no-margin">可用模型建议</div>
-                  <div class="cell-sub">只显示当前选中上游自己的模型列表。</div>
+                  <!-- <div class="cell-sub">只显示当前选中上游自己的模型列表。</div> -->
                 </div>
                 <div v-if="suggestedModels.length" class="mapping-suggest-list">
                   <button
@@ -206,7 +206,7 @@
                       <el-input v-model="item.upstreamModel" placeholder="上游模型名，例如：gpt-4o-mini / qwen3.5-9b" />
                       <button class="action-link is-danger" type="button" @click="removeMapping(item.uid)">删除</button>
                     </div>
-                    <div class="mapping-row-note">这条映射只属于当前选中的上游；切到别的上游会显示它自己的映射。</div>
+                    <!-- <div class="mapping-row-note">这条映射只属于当前选中的上游；切到别的上游会显示它自己的映射。</div> -->
                   </div>
                 </div>
                 <div v-else-if="selectedMappingUpstreamId" class="inline-empty-tip">这个上游还没加映射。没有特殊别名需求也可以直接留空。</div>
@@ -218,7 +218,7 @@
                   <button class="action-link" type="button" @click="addPresetMapping('qwen-local', 'qwen3.5-9b')" :disabled="!selectedMappingUpstreamId">+ qwen-local</button>
                   <button v-if="mappingRows.length" class="action-link is-danger" type="button" @click="clearMappings">清空当前上游映射</button>
                 </div>
-                <div class="field-hint">只有本地模型名和上游模型名都填了，保存时才会记进当前上游名下。</div>
+                <!-- <div class="field-hint">只有本地模型名和上游模型名都填了，保存时才会记进当前上游名下。</div> -->
               </div>
             </div>
         </div>
@@ -244,7 +244,7 @@
         <div class="key-delivery-head">
           <div>
             <div class="result-card-title">这个 Key 的明文只建议你现在处理掉</div>
-            <div class="result-card-desc">适合立刻复制到密码库、环境变量或安全备忘里。关掉弹窗后，不建议再到处翻明文。</div>
+            <div class="result-card-desc">适合立刻复制到密码库、环境变量或安全备忘里。</div>
           </div>
           <span class="state-chip is-on">敏感信息</span>
         </div>
@@ -276,7 +276,7 @@
 
         <div class="key-delivery-notice">
           <div class="key-delivery-notice-title">建议你现在就做一件事</div>
-          <div class="key-delivery-notice-desc">复制后，马上放进密码管理器、部署面板或 `.env`，别只靠脑子记。</div>
+          <div class="key-delivery-notice-desc">复制后，马上放进密码管理器、部署面板或 `.env`。</div>
         </div>
 
         <div class="raw-key-actions dialog-footer-actions">
