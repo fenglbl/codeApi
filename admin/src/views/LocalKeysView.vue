@@ -5,7 +5,7 @@
         <div class="page-section-head">
           <div>
             <div class="section-title">本地 Keys</div>
-            <div class="section-desc">共 {{ rows.length }} 个 Key，启用 {{ enabledCount }} 个。明文只在需要时展示，别到处乱贴。</div>
+            <div class="section-desc">共 {{ rows.length }} 个 Key，启用 {{ enabledCount }} 个。</div>
           </div>
           <el-button type="primary" class="toolbar-primary-btn" @click="openCreate">新增 Key</el-button>
         </div>

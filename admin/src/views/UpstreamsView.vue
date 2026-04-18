@@ -5,7 +5,7 @@
         <div class="page-section-head">
           <div>
             <div class="section-title">上游列表</div>
-            <div class="section-desc">共 {{ rows.length }} 个上游，启用 {{ enabledCount }} 个，已有模型列表 {{ syncedProviderCount }} 个。Base URL 支持填根域名或 /v1。</div>
+            <div class="section-desc">共 {{ rows.length }} 个上游，启用 {{ enabledCount }} 个，已有模型列表 {{ syncedProviderCount }} 个。</div>
           </div>
           <el-button type="primary" class="toolbar-primary-btn" @click="openCreate">新增上游</el-button>
         </div>
