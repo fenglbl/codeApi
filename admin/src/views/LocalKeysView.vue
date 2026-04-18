@@ -120,7 +120,7 @@
             <el-select v-model="form.upstreamBindings" multiple filterable class="full-width-control upstream-binding-select" placeholder="选择这个 Key 可用的上游">
               <el-option v-for="item in upstreams" :key="item.id" :label="item.name" :value="item.id" />
             </el-select>
-            <div class="field-hint">当前已绑定 {{ boundUpstreams.length }} 个上游。至少绑一个，默认上游才有意义。</div>
+            <div class="field-hint">当前已绑定 {{ boundUpstreams.length }} 个上游。</div>
           </el-form-item>
 
           <div class="route-choice-shell">

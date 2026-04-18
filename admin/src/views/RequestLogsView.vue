@@ -1,24 +1,5 @@
 <template>
   <AppLayout title="请求日志" subtitle="查看最近请求走了哪个本地 Key、哪个上游、状态码、耗时和错误内容。">
-    <div class="panel quick-filter-panel">
-      <div class="panel-body">
-        <div class="table-toolbar log-toolbar-tight">
-          <div>
-            <div class="quick-filter-title">快速筛选</div>
-            <!-- <div class="muted">常用视角一把切，少点几下。</div> -->
-          </div>
-          <el-button class="toolbar-ghost-btn" @click="load" :loading="loading">刷新</el-button>
-        </div>
-        <div class="quick-filter-chips">
-          <button class="quick-chip" :class="quickMode === 'all' ? 'is-active' : ''" type="button" @click="applyQuickFilter('all')">全部</button>
-          <button class="quick-chip" :class="quickMode === 'errors' ? 'is-active' : ''" type="button" @click="applyQuickFilter('errors')">只看失败</button>
-          <button class="quick-chip" :class="quickMode === 'stream' ? 'is-active' : ''" type="button" @click="applyQuickFilter('stream')">只看流式</button>
-          <button class="quick-chip" :class="quickMode === 'nonStream' ? 'is-active' : ''" type="button" @click="applyQuickFilter('nonStream')">只看非流</button>
-          <button class="quick-chip" :class="quickMode === 'contextExceeded' ? 'is-active' : ''" type="button" @click="applyQuickFilter('contextExceeded')">上下文超限</button>
-        </div>
-      </div>
-    </div>
-
     <div class="log-overview-grid">
       <div class="overview-card">
         <div class="overview-label">当前结果</div>
